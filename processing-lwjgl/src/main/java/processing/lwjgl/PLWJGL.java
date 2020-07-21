@@ -70,6 +70,9 @@ public class PLWJGL extends PGL {
   static public final String P2D = "processing.lwjgl.PGraphicsLWJGL2D";
   static public final String P3D = "processing.lwjgl.PGraphicsLWJGL3D";  
   
+  //@Deprecated
+  public static int profile;
+  
   // ........................................................
 
   // Public members to access the underlying GL objects and canvas

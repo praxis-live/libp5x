@@ -67,6 +67,10 @@ public class PSurfaceLWJGL implements PSurface {
   private final PGraphics graphics;
   private final PLWJGL pgl;
   private final BlockingQueue<Runnable> tasks;
+  
+  private final int profileGLMajor;
+  private final int profileGLMinor;
+  private final boolean profileGLES;
 
   /**
    * ScaledSketch instance which helps with DPI scaling tasks.
@@ -123,17 +127,40 @@ public class PSurfaceLWJGL implements PSurface {
 
 
   protected PSurfaceLWJGL(PGraphicsLWJGL2D graphics) {
-    this.graphics = graphics;
-    this.pgl = (PLWJGL) graphics.pgl;
-    this.tasks = new LinkedBlockingQueue<>();
+    this(graphics, (PLWJGL) graphics.pgl);
   }
   
   protected PSurfaceLWJGL(PGraphicsLWJGL3D graphics) {
-    this.graphics = graphics;
-    this.pgl = (PLWJGL) graphics.pgl;
-    this.tasks = new LinkedBlockingQueue<>();
+    this(graphics, (PLWJGL) graphics.pgl);
   }
 
+  private PSurfaceLWJGL(PGraphics graphics, PLWJGL pgl) {
+      this.graphics = graphics;
+      this.pgl = pgl;
+      this.tasks = new LinkedBlockingQueue<>();
+      int profile = PLWJGL.profile;
+      switch (profile) {
+          case 1 :
+              profileGLMajor = 2;
+              profileGLMinor = 1;
+              profileGLES = false;
+              break;
+          case 2 :
+              profileGLMajor = 2;
+              profileGLMinor = 0;
+              profileGLES = true;
+              break;
+          case 4 :
+              profileGLMajor = 4;
+              profileGLMinor = 0;
+              profileGLES = false;
+              break;
+          default:
+              profileGLMajor = 3;
+              profileGLMinor = 1;
+              profileGLES = false;
+      }
+  }
 
   //region Callback handling
 
@@ -365,10 +392,11 @@ public class PSurfaceLWJGL implements PSurface {
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+    glfwWindowHint(GLFW_CLIENT_API,
+            profileGLES ? GLFW_OPENGL_ES_API : GLFW_OPENGL_API);
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, profileGLMajor);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, profileGLMinor);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
 
     glfwWindowHint(GLFW_ALPHA_BITS, PGL.REQUESTED_ALPHA_BITS);
