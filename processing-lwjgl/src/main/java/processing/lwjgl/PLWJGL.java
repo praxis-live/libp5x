@@ -107,42 +107,42 @@ public class PLWJGL extends PGL {
     glu = new PGLU();
   }
 
-  @Override
-  protected boolean hasFBOs() {
-    return GL.getCapabilities().GL_ARB_framebuffer_object;
-  }
-
-  @Override
-  protected boolean hasShaders() {
-    // It is enough to check GL_ARB_shading_language_100 because it depends on
-    // ARB_shader_objects, ARB_fragment_shader and ARB_vertex_shader.
-    return GL.getCapabilities().GL_ARB_shading_language_100;
-  }
-
-  @Override
-  protected boolean hasNpotTexSupport() {
-    return GL.getCapabilities().GL_ARB_texture_non_power_of_two;
-  }
-
-  @Override
-  protected boolean hasAutoMipmapGenSupport() {
-    return GL.getCapabilities().glGenerateMipmap != 0;
-  }
-
-  @Override
-  protected boolean hasFboMultisampleSupport() {
-    return GL.getCapabilities().GL_ARB_framebuffer_object;
-  }
-
-  @Override
-  protected boolean hasPackedDepthStencilSupport() {
-    return GL.getCapabilities().GL_ARB_framebuffer_object;
-  }
-
-  @Override
-  protected boolean hasAnisoSamplingSupport() {
-    return GL.getCapabilities().GL_ARB_texture_filter_anisotropic;
-  }
+//  @Override
+//  protected boolean hasFBOs() {
+//    return GL.getCapabilities().GL_ARB_framebuffer_object;
+//  }
+//
+//  @Override
+//  protected boolean hasShaders() {
+//    // It is enough to check GL_ARB_shading_language_100 because it depends on
+//    // ARB_shader_objects, ARB_fragment_shader and ARB_vertex_shader.
+//    return GL.getCapabilities().GL_ARB_shading_language_100;
+//  }
+//
+//  @Override
+//  protected boolean hasNpotTexSupport() {
+//    return GL.getCapabilities().GL_ARB_texture_non_power_of_two;
+//  }
+//
+//  @Override
+//  protected boolean hasAutoMipmapGenSupport() {
+//    return GL.getCapabilities().glGenerateMipmap != 0;
+//  }
+//
+//  @Override
+//  protected boolean hasFboMultisampleSupport() {
+//    return GL.getCapabilities().GL_ARB_framebuffer_object;
+//  }
+//
+//  @Override
+//  protected boolean hasPackedDepthStencilSupport() {
+//    return GL.getCapabilities().GL_ARB_framebuffer_object;
+//  }
+//
+//  @Override
+//  protected boolean hasAnisoSamplingSupport() {
+//    return GL.getCapabilities().GL_ARB_texture_filter_anisotropic;
+//  }
 
 
   ///////////////////////////////////////////////////////////
