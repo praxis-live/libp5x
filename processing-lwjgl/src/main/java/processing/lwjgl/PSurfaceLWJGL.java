@@ -71,6 +71,8 @@ public class PSurfaceLWJGL implements PSurface {
   private final int profileGLMajor;
   private final int profileGLMinor;
   private final boolean profileGLES;
+  private final boolean profileCore;
+  private final boolean profileForward;
 
   /**
    * ScaledSketch instance which helps with DPI scaling tasks.
@@ -144,21 +146,29 @@ public class PSurfaceLWJGL implements PSurface {
               profileGLMajor = 2;
               profileGLMinor = 1;
               profileGLES = false;
+              profileCore = false;
+              profileForward = false;
               break;
           case 2 :
               profileGLMajor = 2;
               profileGLMinor = 0;
               profileGLES = true;
+              profileCore = false;
+              profileForward = false;
               break;
           case 4 :
               profileGLMajor = 4;
-              profileGLMinor = 0;
+              profileGLMinor = 1;
               profileGLES = false;
+              profileCore = true;
+              profileForward = true;
               break;
           default:
               profileGLMajor = 3;
-              profileGLMinor = 1;
+              profileGLMinor = 2;
               profileGLES = false;
+              profileCore = true;
+              profileForward = true;
       }
   }
 
@@ -392,12 +402,24 @@ public class PSurfaceLWJGL implements PSurface {
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
 
-    glfwWindowHint(GLFW_CLIENT_API,
-            profileGLES ? GLFW_OPENGL_ES_API : GLFW_OPENGL_API);
+    if (profileGLES) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    } else {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+    }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, profileGLMajor);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, profileGLMinor);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
+    
+    if (profileCore) {
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    } else {
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
+    }
+    
+    if (profileForward) {
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+    }
 
     glfwWindowHint(GLFW_ALPHA_BITS, PGL.REQUESTED_ALPHA_BITS);
     glfwWindowHint(GLFW_DEPTH_BITS, PGL.REQUESTED_DEPTH_BITS);
