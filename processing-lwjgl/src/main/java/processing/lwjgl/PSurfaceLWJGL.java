@@ -59,6 +59,8 @@ public class PSurfaceLWJGL implements PSurface {
 
   private static final boolean DEBUG_GLFW = 
           Boolean.getBoolean("processing.lwjgl.debug");
+  
+  private static int initCount;
 
   @SuppressWarnings("FieldCanBeLocal")
   private GLDebugMessageCallback debugCallback;
@@ -230,6 +232,8 @@ public class PSurfaceLWJGL implements PSurface {
     initWindow();
     initInputListeners();
 
+    initCount++;
+    
   }
 
 
@@ -581,7 +585,10 @@ public class PSurfaceLWJGL implements PSurface {
       }));
 
     addWindowCallback(GLFW::glfwSetWindowCloseCallback, GLFWWindowCloseCallback
-      .create(window1 -> tasks.add(() -> sketch.exit())));
+      .create(window1 -> {
+          glfwSetWindowShouldClose(window1, false);
+          tasks.add(() -> sketch.exit());
+      }));
 
     addWindowCallback(GLFW::glfwSetWindowFocusCallback, GLFWWindowFocusCallback
       .create((window1, focused) -> {
@@ -1149,53 +1156,62 @@ public class PSurfaceLWJGL implements PSurface {
     private void handleRun() {
         this.threadRunning = true;
         
-        var sync = new Sync();
-        sync.initialise();
-
-        glfwMakeContextCurrent(window);
-
-        GL.createCapabilities();
-        pgl.setThread(Thread.currentThread());
-
-        if (DEBUG_GLFW) {
-            setupDebugOpenGLCallback();
-        }
-
-        // https://stackoverflow.com/questions/35126615/is-using-a-vao-essential-in-opengl-3-1-with-forward-compatibility-flag-set
-        glBindVertexArray(glGenVertexArrays());
-        
-        while (this.threadRunning) {
-
-            // Set the swap interval after the setup() to give the user a chance to
-            // disable V-Sync. As GLFW docs for glfwSwapInterval(int) mention,
-            // "(...) some swap interval extensions used by GLFW do not allow the swap
-            // interval to be reset to zero once it has been set to a non-zero value."
-            if (sketch.frameCount > 0 && this.swapIntervalChanged) {
-                glfwSwapInterval(this.swapInterval);
-                this.swapIntervalChanged = false;
+        try {
+            var sync = new Sync();
+            sync.initialise();
+            
+            glfwMakeContextCurrent(window);
+            
+            GL.createCapabilities();
+            pgl.setThread(Thread.currentThread());
+            
+            if (DEBUG_GLFW) {
+                setupDebugOpenGLCallback();
             }
 
-            // Limit the framerate
-            sync.sync(frameRate);
+            // https://stackoverflow.com/questions/35126615/is-using-a-vao-essential-in-opengl-3-1-with-forward-compatibility-flag-set
+            glBindVertexArray(glGenVertexArrays());
             
-            for (Runnable t = tasks.poll(); t != null; t = tasks.poll()) {
-                t.run();
+            while (this.threadRunning) {
+
+                // Set the swap interval after the setup() to give the user a chance to
+                // disable V-Sync. As GLFW docs for glfwSwapInterval(int) mention,
+                // "(...) some swap interval extensions used by GLFW do not allow the swap
+                // interval to be reset to zero once it has been set to a non-zero value."
+                if (sketch.frameCount > 0 && this.swapIntervalChanged) {
+                    glfwSwapInterval(this.swapInterval);
+                    this.swapIntervalChanged = false;
+                }
+
+                // Limit the framerate
+                sync.sync(frameRate);
+                
+                for (Runnable t = tasks.poll(); t != null; t = tasks.poll()) {
+                    t.run();
+                }
+                
+                handleDraw();
+                
+                PApplet.mainThread().runLater(GLFW::glfwPollEvents);
+                
             }
-
-            handleDraw();
             
-            PApplet.mainThread().runLater(GLFW::glfwPollEvents);
-            
+            glBindVertexArray(0);
+        } catch (Throwable ex) {
+            this.threadRunning = false;
+            System.getLogger(PSurfaceLWJGL.class.getName()).log(System.Logger.Level.ERROR,
+                    "Uncaught exception in rendering thread", ex);
         }
-
-        glBindVertexArray(0);
         
         PApplet.mainThread().runLater(() -> {
             // Need to clean up before exiting
-            // TODO: Make sure sketch does not System.exits before this could run, e.g. during noLoop()
             glfwDestroyWindow(window);
-            glfwTerminate();
-
+            glfwPollEvents();
+            initCount--;
+            if (initCount <= 0) {
+                glfwTerminate();
+                initCount = 0;
+            }
             sketch.exitActual();
         });
         
