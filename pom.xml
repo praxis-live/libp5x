@@ -9,6 +9,14 @@
   <name>libP5X</name>
   <description>Modularized fork of Processing Core libraries.</description>
   <url>https://www.praxislive.org</url>
+  
+  <licenses>
+    <license>
+      <name>LGPL-2.1-only</name>
+      <url>https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <modules>
     <module>processing-core</module>
@@ -36,8 +44,9 @@
     <developer>
       <name>Neil C Smith</name>
       <roles>
-        <role>Lead developer</role>
+        <role>Developer</role>
       </roles>
+      <email>neil@codelerity.com</email>
     </developer>
   </developers>
     
