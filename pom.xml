@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.praxislive.libp5x</groupId>
   <artifactId>libp5x</artifactId>
-  <version>0.353.0-beta-2</version>
+  <version>0.353.0-beta-3</version>
   <packaging>pom</packaging>
     
   <name>libP5X</name>
@@ -21,6 +21,7 @@
   <modules>
     <module>processing-core</module>
     <module>processing-lwjgl</module>
+    <module>processing-java2d</module>
   </modules>
 
   <scm>
