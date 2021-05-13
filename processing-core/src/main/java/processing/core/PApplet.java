@@ -2118,7 +2118,7 @@ public class PApplet implements PConstants {
 
 
   public PGraphics createGraphics(int w, int h) {
-    return createGraphics(w, h, JAVA2D);
+    return createGraphics(w, h, this.renderer);
   }
 
 
@@ -2251,12 +2251,9 @@ public class PApplet implements PConstants {
       }
     }
 
-    try {
-      Class<?> rendererClass =
-        Thread.currentThread().getContextClassLoader().loadClass(renderer);
-
-      Constructor<?> constructor = rendererClass.getConstructor(new Class[] { });
-      PGraphics pg = (PGraphics) constructor.newInstance();
+      PGraphics pg = ServiceLoader.load(GraphicsFactory.class).stream()
+              .flatMap(p -> p.get().createGraphics(this, renderer).stream())
+              .findFirst().orElseGet(() -> makeGraphicsOfClass(renderer));
 
       pg.setParent(this);
       pg.setPrimary(primary);
@@ -2272,6 +2269,15 @@ public class PApplet implements PConstants {
       // everything worked, return it
       return pg;
 
+  }
+
+  private PGraphics makeGraphicsOfClass(String renderer) {
+    try {
+      Class<?> rendererClass =
+      Thread.currentThread().getContextClassLoader().loadClass(renderer);
+      Constructor<?> constructor = rendererClass.getConstructor(new Class[] { });
+      return (PGraphics) constructor.newInstance();
+          
     } catch (InvocationTargetException ite) {
       String msg = ite.getTargetException().getMessage();
       if ((msg != null) &&
@@ -2331,7 +2337,7 @@ public class PApplet implements PConstants {
       }
     }
   }
-
+  
 
   /** Create default renderer, likely to be resized, but needed for surface init. */
   protected PGraphics createPrimaryGraphics() {
@@ -15982,21 +15988,67 @@ public class PApplet implements PConstants {
   
   
     // EXTENSIONS
-  
+
+    /**
+     * A context for running tasks on the main (first) thread of the application.
+     * On some OS it is important that various UI operations are handled on this
+     * thread. To access the main thread context use
+     * {@link PApplet#mainThread()}.
+     */
     public interface MainThreadContext {
 
-        public void runLater(Runnable task);
+      /**
+       * Run the provided task asynchronously on the main thread.
+       * 
+       * @param task runnable task
+       */
+      public void runLater(Runnable task);
 
-        public boolean isMainThread();
+      /**
+       * Query whether the current thread is the main thread.
+       * 
+       * @return true if current thread is main thread
+       */
+      public boolean isMainThread();
 
+    }
+    
+    /**
+     * Interface to be registered and loaded by {@link ServiceLoader} for
+     * creating PGraphics.
+     */
+    public interface GraphicsFactory {
+        
+      /**
+       * Create a PGraphics for the given PApplet and renderer type if this
+       * factory supports that type, or an empty optional.
+       * 
+       * @param parent PApplet parent
+       * @param type renderer
+       * @return PGraphics or empty optional
+       */
+      public Optional<PGraphics> createGraphics(PApplet parent, String type);
+        
     }
     
     private static MainThreadContext mainThreadCtxt;
     
+    /**
+     * Access the main thread context.
+     * 
+     * @return main thread context
+     */
     public static MainThreadContext mainThread() {
         return mainThreadCtxt;
     }
     
+    /**
+     * Override the default main thread context for embedding the library in
+     * an application. May only be set once before calling through to
+     * {@link PApplet#runSketch(java.lang.String[], processing.core.PApplet)}.
+     * 
+     * @param mainThread new main thread context
+     */
     public static synchronized void setMainThreadContext(MainThreadContext mainThread) {
         if (mainThreadCtxt != null) {
             throw new IllegalStateException("Main thread context already set");

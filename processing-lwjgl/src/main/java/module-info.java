@@ -11,4 +11,8 @@ module org.praxislive.libp5x.lwjgl {
     
     exports processing.lwjgl;
     
+    provides processing.core.PApplet.GraphicsFactory with
+            processing.lwjgl.PGraphicsLWJGL2D.GraphicsFactory,
+            processing.lwjgl.PGraphicsLWJGL3D.GraphicsFactory;
+    
 }

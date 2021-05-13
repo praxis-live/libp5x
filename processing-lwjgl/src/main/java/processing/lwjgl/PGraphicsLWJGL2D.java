@@ -21,13 +21,17 @@
  */
 package processing.lwjgl;
 
+import java.util.Optional;
+import processing.core.PApplet;
+import processing.core.PConstants;
+import processing.core.PGraphics;
 import processing.core.PSurface;
 import processing.opengl.PGL;
 import processing.opengl.PGraphics2D;
 import processing.opengl.PGraphicsOpenGL;
 
 public class PGraphicsLWJGL2D extends PGraphics2D {
-
+    
     @Override
     protected PGL createPGL(PGraphicsOpenGL pg) {
         return new PLWJGL(pg);
@@ -37,4 +41,18 @@ public class PGraphicsLWJGL2D extends PGraphics2D {
     public PSurface createSurface() {
         return surface = new PSurfaceLWJGL(this);
     }
+    
+    public static class GraphicsFactory implements PApplet.GraphicsFactory {
+
+        @Override
+        public Optional<PGraphics> createGraphics(PApplet parent, String type) {
+            if (type.equals(PConstants.P2D) || type.equals(PGraphicsLWJGL2D.class.getName())) {
+                return Optional.of(new PGraphicsLWJGL2D());
+            } else {
+                return Optional.empty();
+            }
+        }
+        
+    }
+    
 }

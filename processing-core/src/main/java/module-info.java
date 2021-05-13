@@ -15,4 +15,6 @@ module org.praxislive.libp5x.core {
     opens processing.event;
     opens processing.opengl;
     
+    uses processing.core.PApplet.GraphicsFactory;
+    
 }

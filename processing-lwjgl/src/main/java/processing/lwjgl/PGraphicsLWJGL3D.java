@@ -21,6 +21,10 @@
  */
 package processing.lwjgl;
 
+import java.util.Optional;
+import processing.core.PApplet;
+import processing.core.PConstants;
+import processing.core.PGraphics;
 import processing.core.PSurface;
 import processing.opengl.PGL;
 import processing.opengl.PGraphics3D;
@@ -36,6 +40,19 @@ public class PGraphicsLWJGL3D extends PGraphics3D {
     @Override
     public PSurface createSurface() {
         return surface = new PSurfaceLWJGL(this);
+    }
+    
+    public static class GraphicsFactory implements PApplet.GraphicsFactory {
+
+        @Override
+        public Optional<PGraphics> createGraphics(PApplet parent, String type) {
+            if (type.equals(PConstants.P3D) || type.equals(PGraphicsLWJGL3D.class.getName())) {
+                return Optional.of(new PGraphicsLWJGL3D());
+            } else {
+                return Optional.empty();
+            }
+        }
+        
     }
 
 }
