@@ -10658,6 +10658,23 @@ public class PApplet implements PConstants {
     }
     main(args);
   }
+  
+    /**
+     * Run the provided sketch.
+     * 
+     * @param sketch sketch to run
+     * @param sketchArgs optional additional arguments
+     */
+    public static void main(PApplet sketch, String ... sketchArgs) {
+      DefaultMainThreadContext mainThread = new DefaultMainThreadContext();
+      setMainThreadContext(mainThread);
+      String[] args = new String[] {sketch.getClass().getName()};
+      if (sketchArgs != null && sketchArgs.length > 0) {
+          args = concat(args, sketchArgs);
+      }
+      runSketch(args, sketch);
+      mainThread.run();
+  }
 
 
   // Moving this back off the EDT for alpha 10. Not sure if we're helping or
