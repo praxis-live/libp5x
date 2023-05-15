@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.praxislive.libp5x</groupId>
     <artifactId>libp5x</artifactId>
-    <version>0.353.0-beta-3</version>
+    <version>0.353.0-beta-4-SNAPSHOT</version>
   </parent>
 
   <artifactId>processing-java2d</artifactId>
