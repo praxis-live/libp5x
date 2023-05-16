@@ -211,6 +211,10 @@ public class PSurfaceLWJGL implements PSurface {
       
     this.sketch = sketch;
 
+    if (initCount == 0) {
+        glfwSetErrorCallback(new ErrorHandler());
+    }
+
     if (!glfwInit()) {
       PGraphics.showException("Unable to initialize GLFW");
     }
@@ -218,13 +222,6 @@ public class PSurfaceLWJGL implements PSurface {
     if (DEBUG_GLFW) {
       System.out.println("GLFW initialized: " + glfwGetVersionString());
     }
-
-    // GLFW error callback
-    addCallback(GLFW::glfwSetErrorCallback, GLFWErrorCallback
-      .create((error, description) -> {
-        String message = MemoryUtil.memUTF8(description);
-        PGraphics.showWarning("GLFW error " + error + ": " + message);
-      }));
 
     // TODO initIcons();
     initDisplay();
@@ -1205,11 +1202,17 @@ public class PSurfaceLWJGL implements PSurface {
         
         PApplet.mainThread().runLater(() -> {
             // Need to clean up before exiting
+            Callbacks.glfwFreeCallbacks(window);
+            callbacks.clear();
             glfwDestroyWindow(window);
             glfwPollEvents();
             initCount--;
             if (initCount <= 0) {
                 glfwTerminate();
+                GLFWErrorCallback err = glfwSetErrorCallback(null);
+                if (err != null) {
+                    err.free();
+                }
                 initCount = 0;
             }
             sketch.exitActual();
@@ -1648,6 +1651,15 @@ public class PSurfaceLWJGL implements PSurface {
         }
       }
     }
+  }
+
+  private static class ErrorHandler implements GLFWErrorCallbackI {
+    @Override
+    public void invoke(int error, long description) {
+      String message = MemoryUtil.memUTF8(description);
+      PGraphics.showWarning("GLFW error " + error + ": " + message);
+    }
+
   }
 
 }
