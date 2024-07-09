@@ -24,41 +24,45 @@
 
 package processing.core;
 
-import java.awt.*;
-import java.awt.image.*;
-import java.io.*;
-import java.util.Iterator;
+import java.awt.Image;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Arrays;
 
-import javax.imageio.*;
-import javax.imageio.metadata.*;
+import processing.awt.ShimAWT;
 
 
 /**
-   * ( begin auto-generated from PImage.xml )
-   *
-   * Datatype for storing images. Processing can display <b>.gif</b>,
-   * <b>.jpg</b>, <b>.tga</b>, and <b>.png</b> images. Images may be
-   * displayed in 2D and 3D space. Before an image is used, it must be loaded
-   * with the <b>loadImage()</b> function. The <b>PImage</b> class contains
-   * fields for the <b>width</b> and <b>height</b> of the image, as well as
-   * an array called <b>pixels[]</b> that contains the values for every pixel
-   * in the image. The methods described below allow easy access to the
-   * image's pixels and alpha channel and simplify the process of compositing.<br/>
-   * <br/> using the <b>pixels[]</b> array, be sure to use the
-   * <b>loadPixels()</b> method on the image to make sure that the pixel data
-   * is properly loaded.<br/>
-   * <br/> create a new image, use the <b>createImage()</b> function. Do not
-   * use the syntax <b>new PImage()</b>.
-   *
-   * ( end auto-generated )
-   *
+ *
+ * Datatype for storing images. Processing can display <b>.gif</b>, <b>.jpg</b>,
+ * <b>.tga</b>, and <b>.png</b> images. Images may be displayed in 2D and 3D
+ * space. Before an image is used, it must be loaded with the <b>loadImage()</b>
+ * function. The <b>PImage</b> class contains fields for the <b>width</b> and
+ * <b>height</b> of the image, as well as an array called <b>pixels[]</b> that
+ * contains the values for every pixel in the image. The methods described below
+ * allow easy access to the image's pixels and alpha channel and simplify the
+ * process of compositing.<br />
+ * <br />
+ * Before using the <b>pixels[]</b> array, be sure to use the
+ * <b>loadPixels()</b> method on the image to make sure that the pixel data is
+ * properly loaded.<br />
+ * <br />
+ * To create a new image, use the <b>createImage()</b> function. Do not use the
+ * syntax <b>new PImage()</b>.
+ *
  * @webref image
+ * @webBrief Datatype for storing images
  * @usage Web &amp; Application
  * @instanceName pimg any object of type PImage
  * @see PApplet#loadImage(String)
  * @see PApplet#imageMode(int)
  * @see PApplet#createImage(int, int, int)
  */
+@SuppressWarnings("ManualMinMaxCalculation")
 public class PImage implements PConstants, Cloneable {
 
   /**
@@ -69,28 +73,21 @@ public class PImage implements PConstants, Cloneable {
   public int format;
 
   /**
-   * ( begin auto-generated from pixels.xml )
    *
-   * Array containing the values for all the pixels in the display window.
-   * These values are of the color datatype. This array is the size of the
-   * display window. For example, if the image is 100x100 pixels, there will
-   * be 10000 values and if the window is 200x300 pixels, there will be 60000
-   * values. The <b>index</b> value defines the position of a value within
-   * the array. For example, the statement <b>color b = pixels[230]</b> will
-   * set the variable <b>b</b> to be equal to the value at that location in
-   * the array.<br />
+   * The <b>pixels[]</b> array contains the values for all the pixels in the image. These
+   * values are of the color datatype. This array is the size of the image,
+   * meaning if the image is 100 x 100 pixels, there will be 10,000 values and if
+   * the window is 200 x 300 pixels, there will be 60,000 values. <br />
    * <br />
-   * Before accessing this array, the data must loaded with the
-   * <b>loadPixels()</b> function. After the array data has been modified,
-   * the <b>updatePixels()</b> function must be run to update the changes.
-   * Without <b>loadPixels()</b>, running the code may (or will in future
-   * releases) result in a NullPointerException.
-   *
-   * ( end auto-generated )
+   * Before accessing this array, the data must be loaded with the
+   * <b>loadPixels()</b> method. Failure to do so may result in a
+   * NullPointerException. After the array data has been modified, the
+   * <b>updatePixels()</b> method must be run to update the content of the display
+   * window.
    *
    * @webref image:pixels
+   * @webBrief Array containing the color of every pixel in the image
    * @usage web_application
-   * @brief     Array containing the color of every pixel in the image
    */
   public int[] pixels;
 
@@ -102,26 +99,22 @@ public class PImage implements PConstants, Cloneable {
   public int pixelHeight;
 
   /**
-   * ( begin auto-generated from PImage_width.xml )
    *
    * The width of the image in units of pixels.
    *
-   * ( end auto-generated )
    * @webref pimage:field
+   * @webBrief The width of the image in units of pixels
    * @usage web_application
-   * @brief     Image width
    */
   public int width;
 
   /**
-   * ( begin auto-generated from PImage_height.xml )
    *
    * The height of the image in units of pixels.
    *
-   * ( end auto-generated )
    * @webref pimage:field
+   * @webBrief The height of the image in units of pixels
    * @usage web_application
-   * @brief     Image height
    */
   public int height;
 
@@ -145,14 +138,11 @@ public class PImage implements PConstants, Cloneable {
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
-  // private fields
-  private int fracU, ifU, fracV, ifV, u1, u2, v1, v2, sX, sY, iw, iw1, ih1;
-  private int ul, ll, ur, lr, cUL, cLL, cUR, cLR;
+  private int ifV, sX, v1, v2, iw, iw1, ih1;
   private int srcXOffset, srcYOffset;
-  private int r, g, b, a;
   private int[] srcBuffer;
 
-  // fixed point precision is limited to 15 bits!!
+  // fixed point precision is limited to 15 bits
   static final int PRECISIONB = 15;
   static final int PRECISIONF = 1 << PRECISIONB;
   static final int PREC_MAXVAL = PRECISIONF-1;
@@ -177,7 +167,6 @@ public class PImage implements PConstants, Cloneable {
 
   /**
    * ( begin auto-generated from PImage.xml )
-   *
    * Datatype for storing images. Processing can display <b>.gif</b>,
    * <b>.jpg</b>, <b>.tga</b>, and <b>.png</b> images. Images may be
    * displayed in 2D and 3D space. Before an image is used, it must be loaded
@@ -194,7 +183,6 @@ public class PImage implements PConstants, Cloneable {
    * <br/> <br/>
    * To create a new image, use the <b>createImage()</b> function (do not use
    * <b>new PImage()</b>).
-   * ( end auto-generated )
    * @nowebref
    * @usage web_application
    * @see PApplet#loadImage(String, String)
@@ -203,7 +191,6 @@ public class PImage implements PConstants, Cloneable {
    */
   public PImage() {
     format = ARGB;  // default to ARGB images for release 0116
-    pixelDensity = 1;
   }
 
 
@@ -218,7 +205,7 @@ public class PImage implements PConstants, Cloneable {
     // toxi: is it maybe better to init the image with max alpha enabled?
     //for(int i=0; i<pixels.length; i++) pixels[i]=0xffffffff;
     // fry: i'm opting for the full transparent image, which is how
-    // photoshop works, and our audience oughta be familiar with.
+    // photoshop works, and our audience will likely be familiar with.
     // also, i want to avoid having to set all those pixels since
     // in java it's super slow, and most using this fxn will be
     // setting all the pixels anyway.
@@ -250,7 +237,7 @@ public class PImage implements PConstants, Cloneable {
 
   /**
    * Function to be used by subclasses of PImage to init later than
-   * at the constructor, or re-init later when things changes.
+   * at the constructor, or re-init later when things change.
    * Used by Capture and Movie classes (and perhaps others),
    * because the width/height will not be known when super() is called.
    * (Leave this public so that other libraries can do the same.)
@@ -259,20 +246,43 @@ public class PImage implements PConstants, Cloneable {
     this.width = width;
     this.height = height;
     this.format = format;
-    this.pixelDensity = factor;
 
+    pixelDensity = factor;
     pixelWidth = width * pixelDensity;
     pixelHeight = height * pixelDensity;
-    this.pixels = new int[pixelWidth * pixelHeight];
+
+    pixels = new int[pixelWidth * pixelHeight];
+
+    if (format == RGB) {
+      // Initialize the pixels as opaque, because Java2D gets quirky otherwise.
+      // https://github.com/processing/processing4/issues/388
+      Arrays.fill(pixels, 0xFF000000);
+    }
+  }
+
+
+  private void init(int width, int height, int format, int factor,
+                    int[] pixels) {  // ignore
+    this.width = width;
+    this.height = height;
+    this.format = format;
+
+    pixelDensity = factor;
+    // these weren't being set in 4.0a3, why? [fry 210615]
+    pixelWidth = width * pixelDensity;
+    pixelHeight = height * pixelDensity;
+
+    this.pixels = pixels;
   }
 
 
   /**
    * Check the alpha on an image, using a really primitive loop.
    */
-  protected void checkAlpha() {
+  public void checkAlpha() {
     if (pixels == null) return;
 
+    //noinspection ForLoopReplaceableByForEach
     for (int i = 0; i < pixels.length; i++) {
       // since transparency is often at corners, hopefully this
       // will find a non-transparent pixel quickly and exit
@@ -287,58 +297,31 @@ public class PImage implements PConstants, Cloneable {
   //////////////////////////////////////////////////////////////
 
 
-  /**
-   * Construct a new PImage from a java.awt.Image. This constructor assumes
-   * that you've done the work of making sure a MediaTracker has been used
-   * to fully download the data and that the img is valid.
-   *
-   * @nowebref
-   * @param img assumes a MediaTracker has been used to fully download
-   * the data and the img is valid
-   */
+  public PImage(int width, int height, int[] pixels,
+                boolean requiresCheckAlpha, PApplet parent) {
+    init(width, height, RGB,1, pixels);
+    this.parent = parent;
+
+    if (requiresCheckAlpha) {
+      checkAlpha();
+    }
+  }
+
+  public PImage(int width, int height, int[] pixels,
+                boolean requiresCheckAlpha, PApplet parent,
+                int format, int factor) {
+    init(width, height, format, factor, pixels);
+    this.parent = parent;
+
+    if (requiresCheckAlpha) {
+      checkAlpha();
+    }
+  }
+
+
+  @Deprecated
   public PImage(Image img) {
-    format = RGB;
-    if (img instanceof BufferedImage) {
-      BufferedImage bi = (BufferedImage) img;
-      width = bi.getWidth();
-      height = bi.getHeight();
-      int type = bi.getType();
-      if (type == BufferedImage.TYPE_3BYTE_BGR ||
-          type == BufferedImage.TYPE_4BYTE_ABGR) {
-        pixels = new int[width * height];
-        bi.getRGB(0, 0, width, height, pixels, 0, width);
-        if (type == BufferedImage.TYPE_4BYTE_ABGR) {
-          format = ARGB;
-        } else {
-          opaque();
-        }
-      } else {
-        DataBuffer db = bi.getRaster().getDataBuffer();
-        if (db instanceof DataBufferInt) {
-          pixels = ((DataBufferInt) db).getData();
-          if (type == BufferedImage.TYPE_INT_ARGB) {
-            format = ARGB;
-          } else if (type == BufferedImage.TYPE_INT_RGB) {
-            opaque();
-          }
-        }
-      }
-    }
-    // Implements fall-through if not DataBufferInt above, or not a
-    // known type, or not DataBufferInt for the data itself.
-    if (pixels == null) {  // go the old school Java 1.0 route
-      width = img.getWidth(null);
-      height = img.getHeight(null);
-      pixels = new int[width * height];
-      PixelGrabber pg =
-        new PixelGrabber(img, 0, 0, width, height, pixels, 0, width);
-      try {
-        pg.grabPixels();
-      } catch (InterruptedException e) { }
-    }
-    pixelDensity = 1;
-    pixelWidth = width;
-    pixelHeight = height;
+    ShimAWT.fromNativeImage(img, this);
   }
 
 
@@ -347,22 +330,15 @@ public class PImage implements PConstants, Cloneable {
    * written in a cross-platform fashion for desktop, Android, and others.
    * This is still included for PGraphics objects, which may need the image.
    */
+  @Deprecated
   public Image getImage() {  // ignore
     return (Image) getNative();
   }
 
 
-  /**
-   * Returns a native BufferedImage from this PImage.
-   */
   public Object getNative() {  // ignore
-    loadPixels();
-    int type = (format == RGB) ?
-      BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
-    BufferedImage image = new BufferedImage(pixelWidth, pixelHeight, type);
-    WritableRaster wr = image.getRaster();
-    wr.setDataElements(0, 0, pixelWidth, pixelHeight, pixels);
-    return image;
+    // TODO temporary solution for maximum backwards compatibility
+    return ShimAWT.getNativeImage(this);
   }
 
 
@@ -411,28 +387,18 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_loadPixels.xml )
+   * Loads the pixel data of the current display window into the <b>pixels[]</b>
+   * array. This function must always be called before reading from or writing to
+   * <b>pixels[]</b>. Subsequent changes to the display window will not be
+   * reflected in <b>pixels</b> until <b>loadPixels()</b> is called again.
    *
-   * Loads the pixel data for the image into its <b>pixels[]</b> array. This
-   * function must always be called before reading from or writing to <b>pixels[]</b>.
-   * <br/><br/> renderers may or may not seem to require <b>loadPixels()</b>
-   * or <b>updatePixels()</b>. However, the rule is that any time you want to
-   * manipulate the <b>pixels[]</b> array, you must first call
-   * <b>loadPixels()</b>, and after changes have been made, call
-   * <b>updatePixels()</b>. Even if the renderer may not seem to use this
-   * function in the current Processing release, this will always be subject
-   * to change.
-   *
-   * ( end auto-generated )
-   *
-   * <h3>Advanced</h3>
-   * Call this when you want to mess with the pixels[] array.
+   * <h3>Advanced</h3> Call this when you want to mess with the pixels[] array.
    * <p/>
-   * For subclasses where the pixels[] buffer isn't set by default,
-   * this should copy all data into the pixels[] array
+   * For subclasses where the pixels[] buffer isn't set by default, this should
+   * copy all data into the pixels[] array
    *
    * @webref pimage:pixels
-   * @brief Loads the pixel data for the image into its pixels[] array
+   * @webBrief Loads the pixel data for the image into its <b>pixels[]</b> array
    * @usage web_application
    */
   public void loadPixels() {  // ignore
@@ -449,30 +415,19 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_updatePixels.xml )
    *
-   * Updates the image with the data in its <b>pixels[]</b> array. Use in
-   * conjunction with <b>loadPixels()</b>. If you're only reading pixels from
-   * the array, there's no need to call <b>updatePixels()</b>.
-   * <br/><br/> renderers may or may not seem to require <b>loadPixels()</b>
-   * or <b>updatePixels()</b>. However, the rule is that any time you want to
-   * manipulate the <b>pixels[]</b> array, you must first call
-   * <b>loadPixels()</b>, and after changes have been made, call
-   * <b>updatePixels()</b>. Even if the renderer may not seem to use this
-   * function in the current Processing release, this will always be subject
-   * to change.
-   * <br/> <br/>
-   * Currently, none of the renderers use the additional parameters to
-   * <b>updatePixels()</b>, however this may be implemented in the future.
+   * Updates the display window with the data in the <b>pixels[]</b> array. Use in
+   * conjunction with <b>loadPixels()</b>. If you're only reading pixels from the
+   * array, there's no need to call <b>updatePixels()</b> &mdash; updating is only
+   * necessary to apply changes.
    *
-   * ( end auto-generated )
-   * <h3>Advanced</h3>
-   * Mark the pixels in this region as needing an update.
-   * This is not currently used by any of the renderers, however the api
-   * is structured this way in the hope of being able to use this to
-   * speed things up in the future.
+   * <h3>Advanced</h3> Mark the pixels in this region as needing an update. This
+   * is not currently used by any of the renderers, however the api is structured
+   * this way in the hope of being able to use this to speed things up in the
+   * future.
+   *
    * @webref pimage:pixels
-   * @brief Updates the image with the data in its pixels[] array
+   * @webBrief Updates the image with the data in its <b>pixels[]</b> array
    * @usage web_application
    * @param x x-coordinate of the upper-left corner
    * @param y y-coordinate of the upper-left corner
@@ -524,127 +479,29 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_resize.xml )
    *
    * Resize the image to a new width and height. To make the image scale
    * proportionally, use 0 as the value for the <b>wide</b> or <b>high</b>
    * parameter. For instance, to make the width of an image 150 pixels, and
-   * change the height using the same proportion, use resize(150, 0).<br />
+   * change the height using the same proportion, use <b>resize(150, 0)</b>.<br />
    * <br />
-   * Even though a PGraphics is technically a PImage, it is not possible to
-   * rescale the image data found in a PGraphics. (It's simply not possible
+   * Even though a PGraphics is technically a <b>PImage</b>, it is not possible to
+   * rescale the image data found in a <b>PGraphics</b>. (It's simply not possible
    * to do this consistently across renderers: technically infeasible with
-   * P3D, or what would it even do with PDF?) If you want to resize PGraphics
+   * P3D, or what would it even do with PDF?) If you want to resize <b>PGraphics</b>
    * content, first get a copy of its image data using the <b>get()</b>
    * method, and call <b>resize()</b> on the PImage that is returned.
    *
-   * ( end auto-generated )
    * @webref pimage:method
-   * @brief Changes the size of an image to a new width and height
+   * @webBrief Resize the image to a new width and height
    * @usage web_application
    * @param w the resized image width
    * @param h the resized image height
    * @see PImage#get(int, int, int, int)
    */
   public void resize(int w, int h) {  // ignore
-    if (w <= 0 && h <= 0) {
-      throw new IllegalArgumentException("width or height must be > 0 for resize");
-    }
-
-    if (w == 0) {  // Use height to determine relative size
-      float diff = (float) h / (float) height;
-      w = (int) (width * diff);
-    } else if (h == 0) {  // Use the width to determine relative size
-      float diff = (float) w / (float) width;
-      h = (int) (height * diff);
-    }
-
-    BufferedImage img =
-      shrinkImage((BufferedImage) getNative(), w*pixelDensity, h*pixelDensity);
-
-    PImage temp = new PImage(img);
-    this.pixelWidth = temp.width;
-    this.pixelHeight = temp.height;
-
-    // Get the resized pixel array
-    this.pixels = temp.pixels;
-
-    this.width = pixelWidth / pixelDensity;
-    this.height = pixelHeight / pixelDensity;
-
-    // Mark the pixels array as altered
-    updatePixels();
-  }
-
-
-  // Adapted from getFasterScaledInstance() method from page 111 of
-  // "Filthy Rich Clients" by Chet Haase and Romain Guy
-  // Additional modifications and simplifications have been added,
-  // plus a fix to deal with an infinite loop if images are expanded.
-  // http://code.google.com/p/processing/issues/detail?id=1463
-  static private BufferedImage shrinkImage(BufferedImage img,
-                                           int targetWidth, int targetHeight) {
-    int type = (img.getTransparency() == Transparency.OPAQUE) ?
-      BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
-    BufferedImage outgoing = img;
-    BufferedImage scratchImage = null;
-    Graphics2D g2 = null;
-    int prevW = outgoing.getWidth();
-    int prevH = outgoing.getHeight();
-    boolean isTranslucent = img.getTransparency() != Transparency.OPAQUE;
-
-    // Use multi-step technique: start with original size, then scale down in
-    // multiple passes with drawImage() until the target size is reached
-    int w = img.getWidth();
-    int h = img.getHeight();
-
-    do {
-      if (w > targetWidth) {
-        w /= 2;
-        // if this is the last step, do the exact size
-        if (w < targetWidth) {
-          w = targetWidth;
-        }
-      } else if (targetWidth >= w) {
-        w = targetWidth;
-      }
-      if (h > targetHeight) {
-        h /= 2;
-        if (h < targetHeight) {
-          h = targetHeight;
-        }
-      } else if (targetHeight >= h) {
-        h = targetHeight;
-      }
-      if (scratchImage == null || isTranslucent) {
-        // Use a single scratch buffer for all iterations and then copy
-        // to the final, correctly-sized image before returning
-        scratchImage = new BufferedImage(w, h, type);
-        g2 = scratchImage.createGraphics();
-      }
-      g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                          RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-      g2.drawImage(outgoing, 0, 0, w, h, 0, 0, prevW, prevH, null);
-      prevW = w;
-      prevH = h;
-      outgoing = scratchImage;
-    } while (w != targetWidth || h != targetHeight);
-
-    if (g2 != null) {
-      g2.dispose();
-    }
-
-    // If we used a scratch buffer that is larger than our target size,
-    // create an image of the right size and copy the results into it
-    if (targetWidth != outgoing.getWidth() ||
-        targetHeight != outgoing.getHeight()) {
-      scratchImage = new BufferedImage(targetWidth, targetHeight, type);
-      g2 = scratchImage.createGraphics();
-      g2.drawImage(outgoing, 0, 0, null);
-      g2.dispose();
-      outgoing = scratchImage;
-    }
-    return outgoing;
+    //throw new RuntimeException("resize() not implemented for this PImage type");
+    ShimAWT.resizeImage(this, w, h);
   }
 
 
@@ -674,7 +531,6 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_get.xml )
    *
    * Reads the color of any pixel or grabs a section of an image. If no
    * parameters are specified, the entire image is returned. Use the <b>x</b>
@@ -684,8 +540,8 @@ public class PImage implements PConstants, Cloneable {
    * <b>y</b> parameters define the coordinates for the upper-left corner of
    * the image, regardless of the current <b>imageMode()</b>.<br />
    * <br />
-   * If the pixel requested is outside of the image window, black is
-   * returned. The numbers returned are scaled according to the current color
+   * If the pixel requested is outside the image window, black is returned.
+   * The numbers returned are scaled according to the current color
    * ranges, but only RGB values are returned by this function. For example,
    * even though you may have drawn a shape with <b>colorMode(HSB)</b>, the
    * numbers returned will be in RGB format.<br />
@@ -695,10 +551,8 @@ public class PImage implements PConstants, Cloneable {
    * equivalent statement to <b>get(x, y)</b> using <b>pixels[]</b> is
    * <b>pixels[y*width+x]</b>. See the reference for <b>pixels[]</b> for more information.
    *
-   * ( end auto-generated )
-   *
    * <h3>Advanced</h3>
-   * Returns an ARGB "color" type (a packed 32 bit int with the color.
+   * Returns an ARGB "color" type (a packed 32-bit int) with the color.
    * If the coordinate is outside the image, zero is returned
    * (black, but completely transparent).
    * <P>
@@ -716,7 +570,7 @@ public class PImage implements PConstants, Cloneable {
    * pixels[] array directly.
    *
    * @webref image:pixels
-   * @brief Reads the color of any pixel or grabs a rectangle of pixels
+   * @webBrief Reads the color of any pixel or grabs a rectangle of pixels
    * @usage web_application
    * @param x x-coordinate of the pixel
    * @param y y-coordinate of the pixel
@@ -727,17 +581,12 @@ public class PImage implements PConstants, Cloneable {
   public int get(int x, int y) {
     if ((x < 0) || (y < 0) || (x >= pixelWidth) || (y >= pixelHeight)) return 0;
 
-    switch (format) {
-      case RGB:
-        return pixels[y*pixelWidth + x] | 0xff000000;
-
-      case ARGB:
-        return pixels[y*pixelWidth + x];
-
-      case ALPHA:
-        return (pixels[y*pixelWidth + x] << 24) | 0xffffff;
-    }
-    return 0;
+    return switch (format) {
+      case RGB -> pixels[y * pixelWidth + x] | 0xff000000;
+      case ARGB -> pixels[y * pixelWidth + x];
+      case ALPHA -> (pixels[y * pixelWidth + x] << 24) | 0xffffff;
+      default -> 0;
+    };
   }
 
 
@@ -803,7 +652,7 @@ public class PImage implements PConstants, Cloneable {
    */
   public PImage get() {
     // Formerly this used clone(), which caused memory problems.
-    // http://code.google.com/p/processing/issues/detail?id=42
+    // https://github.com/processing/processing/issues/81
     return get(0, 0, pixelWidth, pixelHeight);
   }
 
@@ -833,7 +682,6 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_set.xml )
    *
    * Changes the color of any pixel or writes an image directly into the
    * display window.<br />
@@ -851,10 +699,8 @@ public class PImage implements PConstants, Cloneable {
    * is <b>pixels[y*width+x] = #000000</b>. See the reference for
    * <b>pixels[]</b> for more information.
    *
-   * ( end auto-generated )
-   *
    * @webref image:pixels
-   * @brief writes a color to any pixel or writes an image into another
+   * @webBrief Writes a color to any pixel or writes an image into another
    * @usage web_application
    * @param x x-coordinate of the pixel
    * @param y y-coordinate of the pixel
@@ -865,7 +711,13 @@ public class PImage implements PConstants, Cloneable {
    */
   public void set(int x, int y, int c) {
     if ((x < 0) || (y < 0) || (x >= pixelWidth) || (y >= pixelHeight)) return;
-    pixels[y*pixelWidth + x] = c;
+
+    switch (format) {
+      case RGB -> pixels[y * pixelWidth + x] = 0xff000000 | c;
+      case ARGB -> pixels[y * pixelWidth + x] = c;
+      case ALPHA -> pixels[y * pixelWidth + x] = ((c & 0xff) << 24) | 0xffffff;
+    }
+
     updatePixels(x, y, 1, 1);  // slow...
   }
 
@@ -940,7 +792,7 @@ public class PImage implements PConstants, Cloneable {
    * @param maskArray array of integers used as the alpha channel, needs to be
    * the same length as the image's pixel array.
    */
-  public void mask(int maskArray[]) {  // ignore
+  public void mask(int[] maskArray) {  // ignore
     loadPixels();
     // don't execute if mask image is different size
     if (maskArray.length != pixels.length) {
@@ -955,7 +807,6 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_mask.xml )
    *
    * Masks part of an image from displaying by loading another image and
    * using it as an alpha channel. This mask image should only contain
@@ -967,8 +818,6 @@ public class PImage implements PConstants, Cloneable {
    * creating dynamically generated alpha masks. This array must be of the
    * same length as the target image's pixels array and should contain only
    * grayscale data of values between 0-255.
-   *
-   * ( end auto-generated )
    *
    * <h3>Advanced</h3>
    *
@@ -984,10 +833,10 @@ public class PImage implements PConstants, Cloneable {
    * which will make the image into a "correct" grayscale by
    * performing a proper luminance-based conversion.
    *
-   * @webref pimage:method
+   * @webref image:pixels
+   * @webBrief Masks part of an image with another image as an alpha channel
    * @usage web_application
    * @param img image to use as the mask
-   * @brief Masks part of an image with another image as an alpha channel
    */
   public void mask(PImage img) {
     img.loadPixels();
@@ -1073,36 +922,41 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_filter.xml )
+   * Filters the image as defined by one of the following modes:<br />
+   * <br />
+   * THRESHOLD<br />
+   * Converts the image to black and white pixels depending on if they
+   * are above or below the threshold defined by the level parameter.
+   * The parameter must be between 0.0 (black) and 1.0 (white).
+   * If no level is specified, 0.5 is used.<br />
+   * <br />
+   * GRAY<br />
+   * Converts any colors in the image to grayscale equivalents. No parameter is
+   * used.<br />
+   * <br />
+   * OPAQUE<br />
+   * Sets the alpha channel to entirely opaque. No parameter is used.<br />
+   * <br />
+   * INVERT<br />
+   * Sets each pixel to its inverse value. No parameter is used.<br />
+   * <br />
+   * POSTERIZE<br />
+   * Limits each channel of the image to the number of colors specified as the
+   * parameter. The parameter can be set to values between 2 and 255, but results
+   * are most noticeable in the lower ranges.<br />
+   * <br />
+   * BLUR<br />
+   * Executes a Gaussian blur with the level parameter specifying the extent of
+   * the blurring. If no parameter is used, the blur is equivalent to Gaussian
+   * blur of radius 1. Larger values increase the blur.<br />
+   * <br />
+   * ERODE<br />
+   * Reduces the light areas. No parameter is used.<br />
+   * <br />
+   * DILATE<br />
+   * Increases the light areas. No parameter is used.
    *
-   * Filters an image as defined by one of the following modes:<br /><br
-   * />THRESHOLD - converts the image to black and white pixels depending if
-   * they are above or below the threshold defined by the level parameter.
-   * The level must be between 0.0 (black) and 1.0(white). If no level is
-   * specified, 0.5 is used.<br />
-   * <br />
-   * GRAY - converts any colors in the image to grayscale equivalents<br />
-   * <br />
-   * INVERT - sets each pixel to its inverse value<br />
-   * <br />
-   * POSTERIZE - limits each channel of the image to the number of colors
-   * specified as the level parameter<br />
-   * <br />
-   * BLUR - executes a Guassian blur with the level parameter specifying the
-   * extent of the blurring. If no level parameter is used, the blur is
-   * equivalent to Guassian blur of radius 1<br />
-   * <br />
-   * OPAQUE - sets the alpha channel to entirely opaque<br />
-   * <br />
-   * ERODE - reduces the light areas with the amount defined by the level
-   * parameter<br />
-   * <br />
-   * DILATE - increases the light areas with the amount defined by the level parameter
-   *
-   * ( end auto-generated )
-   *
-   * <h3>Advanced</h3>
-   * Method to apply a variety of basic filters to this image.
+   * <h3>Advanced</h3> Method to apply a variety of basic filters to this image.
    * <P>
    * <UL>
    * <LI>filter(BLUR) provides a basic blur.
@@ -1120,9 +974,10 @@ public class PImage implements PConstants, Cloneable {
    * <A HREF="http://incubator.quasimondo.com">Mario Klingemann</A>
    *
    * @webref image:pixels
-   * @brief Converts the image to grayscale or black and white
+   * @webBrief Converts the image to grayscale or black and white
    * @usage web_application
-   * @param kind Either THRESHOLD, GRAY, OPAQUE, INVERT, POSTERIZE, BLUR, ERODE, or DILATE
+   * @param kind  Either THRESHOLD, GRAY, OPAQUE, INVERT, POSTERIZE, BLUR, ERODE,
+   *              or DILATE
    * @param param unique for each, see above
    */
   public void filter(int kind, float param) {
@@ -1194,14 +1049,6 @@ public class PImage implements PConstants, Cloneable {
   }
 
 
-  /** Set the high bits of all pixels to opaque. */
-  protected void opaque() {
-    for (int i = 0; i < pixels.length; i++) {
-      pixels[i] = 0xFF000000 | pixels[i];
-    }
-  }
-
-
   /**
    * Optimized code for building the blur kernel.
    * further optimized blur code (approx. 15% for radius=20)
@@ -1211,7 +1058,8 @@ public class PImage implements PConstants, Cloneable {
    */
   protected void buildBlurKernel(float r) {
     int radius = (int) (r * 3.5f);
-    radius = (radius < 1) ? 1 : ((radius < 248) ? radius : 248);
+    if (radius < 1) radius = 1;
+    if (radius > 248) radius = 248;
     if (blurRadius != radius) {
       blurRadius = radius;
       blurKernelSize = 1 + blurRadius<<1;
@@ -1239,7 +1087,7 @@ public class PImage implements PConstants, Cloneable {
   protected void blurAlpha(float r) {
     int sum, cb;
     int read, ri, ym, ymi, bk0;
-    int b2[] = new int[pixels.length];
+    int[] b2 = new int[pixels.length];
     int yi = 0;
 
     buildBlurKernel(r);
@@ -1308,11 +1156,11 @@ public class PImage implements PConstants, Cloneable {
 
 
   protected void blurRGB(float r) {
-    int sum, cr, cg, cb; //, k;
-    int /*pixel,*/ read, ri, /*roff,*/ ym, ymi, /*riw,*/ bk0;
-    int r2[] = new int[pixels.length];
-    int g2[] = new int[pixels.length];
-    int b2[] = new int[pixels.length];
+    int sum, cr, cg, cb;
+    int read, ri, ym, ymi, bk0;
+    int[] r2 = new int[pixels.length];
+    int[] g2 = new int[pixels.length];
+    int[] b2 = new int[pixels.length];
     int yi = 0;
 
     buildBlurKernel(r);
@@ -1393,10 +1241,10 @@ public class PImage implements PConstants, Cloneable {
     int sum, cr, cg, cb, ca;
     int /*pixel,*/ read, ri, /*roff,*/ ym, ymi, /*riw,*/ bk0;
     int wh = pixels.length;
-    int r2[] = new int[wh];
-    int g2[] = new int[wh];
-    int b2[] = new int[wh];
-    int a2[] = new int[wh];
+    int[] r2 = new int[wh];
+    int[] g2 = new int[wh];
+    int[] b2 = new int[wh];
+    int[] a2 = new int[wh];
     int yi = 0;
 
     buildBlurKernel(r);
@@ -1540,7 +1388,7 @@ public class PImage implements PConstants, Cloneable {
         }
         if (lumDown > currLum) {
           result = colDown;
-          currLum = lumDown;
+//          currLum = lumDown;  // removed, unused assignment
         }
         outgoing[index++] = result;
       }
@@ -1609,7 +1457,7 @@ public class PImage implements PConstants, Cloneable {
         }
         if (lumDown < currLum) {
           result = colDown;
-          currLum = lumDown;
+//          currLum = lumDown;  // removed, unused assignment
         }
         outgoing[index++] = result;
       }
@@ -1625,8 +1473,6 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_copy.xml )
-   *
    * Copies a region of pixels from one image into another. If the source and
    * destination regions aren't the same size, it will automatically resize
    * source pixels to fit the specified target region. No alpha information
@@ -1635,10 +1481,8 @@ public class PImage implements PConstants, Cloneable {
    * <br /><br />
    * As of release 0149, this function ignores <b>imageMode()</b>.
    *
-   * ( end auto-generated )
-   *
    * @webref image:pixels
-   * @brief Copies the entire image
+   * @webBrief Copies the entire image
    * @usage web_application
    * @param sx X coordinate of the source's upper left corner
    * @param sy Y coordinate of the source's upper left corner
@@ -1674,13 +1518,11 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from blendColor.xml )
    *
    * Blends two color values together based on the blending mode given as the
    * <b>MODE</b> parameter. The possible modes are described in the reference
    * for the <b>blend()</b> function.
    *
-   * ( end auto-generated )
    * <h3>Advanced</h3>
    * <UL>
    * <LI>REPLACE - destination colour equals colour of source pixel: C = A.
@@ -1694,7 +1536,7 @@ public class PImage implements PConstants, Cloneable {
    *     Clipped to 0..255, Photoshop calls this "Linear Burn",
    *     and Director calls it "Add Pin".
    *
-   * <LI>SUBTRACT - substractive blend with black clip:
+   * <LI>SUBTRACT - subtractive blend with black clip:
    *     <TT>C = max(B - A*factor, 0)</TT>.
    *     Clipped to 0..255, Photoshop calls this "Linear Dodge",
    *     and Director calls it "Subtract Pin".
@@ -1741,10 +1583,12 @@ public class PImage implements PConstants, Cloneable {
    * <TT>r1 + r2 - ((2 * r1 * r2) / 255)</TT> because <TT>255 == 1.0</TT>
    * not <TT>256 == 1.0</TT>. In other words, <TT>(255*255)>>8</TT> is not
    * the same as <TT>(255*255)/255</TT>. But for real-time use the shifts
-   * are preferrable, and the difference is insignificant for applications
+   * are preferable, and the difference is insignificant for applications
    * built with Processing.</P>
    *
-   * @webref color:creating_reading
+   * @webref color:creating & reading
+   * @webBrief Blends two color values together based on the blending mode given as the
+   * <b>MODE</b> parameter
    * @usage web_application
    * @param c1 the first color to blend
    * @param c2 the second color to blend
@@ -1753,30 +1597,24 @@ public class PImage implements PConstants, Cloneable {
    * @see PApplet#color(float, float, float, float)
    */
   static public int blendColor(int c1, int c2, int mode) {  // ignore
-    switch (mode) {
-    case REPLACE:    return c2;
-    case BLEND:      return blend_blend(c1, c2);
-
-    case ADD:        return blend_add_pin(c1, c2);
-    case SUBTRACT:   return blend_sub_pin(c1, c2);
-
-    case LIGHTEST:   return blend_lightest(c1, c2);
-    case DARKEST:    return blend_darkest(c1, c2);
-
-    case DIFFERENCE: return blend_difference(c1, c2);
-    case EXCLUSION:  return blend_exclusion(c1, c2);
-
-    case MULTIPLY:   return blend_multiply(c1, c2);
-    case SCREEN:     return blend_screen(c1, c2);
-
-    case HARD_LIGHT: return blend_hard_light(c1, c2);
-    case SOFT_LIGHT: return blend_soft_light(c1, c2);
-    case OVERLAY:    return blend_overlay(c1, c2);
-
-    case DODGE:      return blend_dodge(c1, c2);
-    case BURN:       return blend_burn(c1, c2);
-    }
-    return 0;
+    return switch (mode) {
+      case REPLACE -> c2;
+      case BLEND -> blend_blend(c1, c2);
+      case ADD -> blend_add_pin(c1, c2);
+      case SUBTRACT -> blend_sub_pin(c1, c2);
+      case LIGHTEST -> blend_lightest(c1, c2);
+      case DARKEST -> blend_darkest(c1, c2);
+      case DIFFERENCE -> blend_difference(c1, c2);
+      case EXCLUSION -> blend_exclusion(c1, c2);
+      case MULTIPLY -> blend_multiply(c1, c2);
+      case SCREEN -> blend_screen(c1, c2);
+      case HARD_LIGHT -> blend_hard_light(c1, c2);
+      case SOFT_LIGHT -> blend_soft_light(c1, c2);
+      case OVERLAY -> blend_overlay(c1, c2);
+      case DODGE -> blend_dodge(c1, c2);
+      case BURN -> blend_burn(c1, c2);
+      default -> 0;
+    };
   }
 
 
@@ -1787,23 +1625,22 @@ public class PImage implements PConstants, Cloneable {
 
 
   /**
-   * ( begin auto-generated from PImage_blend.xml )
    *
    * Blends a region of pixels into the image specified by the <b>img</b>
    * parameter. These copies utilize full alpha channel support and a choice
    * of the following modes to blend the colors of source pixels (A) with the
    * ones of pixels in the destination image (B):<br />
    * <br />
-   * BLEND - linear interpolation of colours: C = A*factor + B<br />
+   * BLEND - linear interpolation of colours: <b>C = A*factor + B</b><br />
    * <br />
-   * ADD - additive blending with white clip: C = min(A*factor + B, 255)<br />
+   * ADD - additive blending with white clip: <b>C = min(A*factor + B, 255)</b><br />
    * <br />
-   * SUBTRACT - subtractive blending with black clip: C = max(B - A*factor,
-   * 0)<br />
+   * SUBTRACT - subtractive blending with black clip: <b>C = max(B - A*factor,
+   * 0)</b><br />
    * <br />
-   * DARKEST - only the darkest colour succeeds: C = min(A*factor, B)<br />
+   * DARKEST - only the darkest colour succeeds: <b>C = min(A*factor, B)</b><br />
    * <br />
-   * LIGHTEST - only the lightest colour succeeds: C = max(A*factor, B)<br />
+   * LIGHTEST - only the lightest colour succeeds: <b>C = max(A*factor, B)</b><br />
    * <br />
    * DIFFERENCE - subtract colors from underlying image.<br />
    * <br />
@@ -1827,7 +1664,7 @@ public class PImage implements PConstants, Cloneable {
    * BURN - Darker areas are applied, increasing contrast, ignores lights.
    * Called "Color Burn" in Illustrator and Photoshop.<br />
    * <br />
-   * All modes use the alpha information (highest byte) of source image
+   * All modes use the alpha information (the highest byte) of source image
    * pixels as the blending factor. If the source and destination regions are
    * different sizes, the image will be automatically resized to match the
    * destination size. If the <b>srcImg</b> parameter is not used, the
@@ -1835,17 +1672,15 @@ public class PImage implements PConstants, Cloneable {
    * <br />
    * As of release 0149, this function ignores <b>imageMode()</b>.
    *
-   * ( end auto-generated )
-   *
    * @webref image:pixels
-   * @brief  Copies a pixel or rectangle of pixels using different blending modes
+   * @webBrief Copies a pixel or rectangle of pixels using different blending modes
    * @param src an image variable referring to the source image
    * @param sx X coordinate of the source's upper left corner
    * @param sy Y coordinate of the source's upper left corner
    * @param sw source image width
    * @param sh source image height
-   * @param dx X coordinate of the destinations's upper left corner
-   * @param dy Y coordinate of the destinations's upper left corner
+   * @param dx X coordinate of the destination's upper left corner
+   * @param dy Y coordinate of the destination's upper left corner
    * @param dw destination image width
    * @param dh destination image height
    * @param mode Either BLEND, ADD, SUBTRACT, LIGHTEST, DARKEST, DIFFERENCE, EXCLUSION, MULTIPLY, SCREEN, OVERLAY, HARD_LIGHT, SOFT_LIGHT, DODGE, BURN
@@ -1865,18 +1700,18 @@ public class PImage implements PConstants, Cloneable {
     loadPixels();
     if (src == this) {
       if (intersect(sx, sy, sx2, sy2, dx, dy, dx2, dy2)) {
-        blit_resize(get(sx, sy, sw, sh),
+        blitResize(get(sx, sy, sw, sh),
                     0, 0, sw, sh,
-                    pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode);
+                    pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode, true);
       } else {
         // same as below, except skip the loadPixels() because it'd be redundant
-        blit_resize(src, sx, sy, sx2, sy2,
-                    pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode);
+        blitResize(src, sx, sy, sx2, sy2,
+                    pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode, true);
       }
     } else {
       src.loadPixels();
-      blit_resize(src, sx, sy, sx2, sy2,
-                  pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode);
+      blitResize(src, sx, sy, sx2, sy2,
+                  pixels, pixelWidth, pixelHeight, dx, dy, dx2, dy2, mode, true);
       //src.updatePixels();
     }
     updatePixels();
@@ -1927,11 +1762,11 @@ public class PImage implements PConstants, Cloneable {
    * Uses bilinear filtering if smooth() has been enabled
    * 'mode' determines the blending mode used in the process.
    */
-  private void blit_resize(PImage img,
-                           int srcX1, int srcY1, int srcX2, int srcY2,
-                           int[] destPixels, int screenW, int screenH,
-                           int destX1, int destY1, int destX2, int destY2,
-                           int mode) {
+  private void blitResize(PImage img,
+                          int srcX1, int srcY1, int srcX2, int srcY2,
+                          int[] destPixels, int screenW, int screenH,
+                          int destX1, int destY1, int destX2, int destY2,
+                          int mode, boolean smooth) {
     if (srcX1 < 0) srcX1 = 0;
     if (srcY1 < 0) srcY1 = 0;
     if (srcX2 > img.pixelWidth) srcX2 = img.pixelWidth;
@@ -1942,10 +1777,9 @@ public class PImage implements PConstants, Cloneable {
     int destW = destX2 - destX1;
     int destH = destY2 - destY1;
 
-    boolean smooth = true;  // may as well go with the smoothing these days
-
     if (!smooth) {
-      srcW++; srcH++;
+      srcW++;
+      srcH++;
     }
 
     if (destW <= 0 || destH <= 0 ||
@@ -1977,12 +1811,23 @@ public class PImage implements PConstants, Cloneable {
     srcBuffer = img.pixels;
 
     if (smooth) {
-      // use bilinear filtering
-      iw = img.pixelWidth;
-      iw1 = img.pixelWidth - 1;
-      ih1 = img.pixelHeight - 1;
+      blitResizeBilinear(img, destPixels, destOffset, screenW, destW, destH, dx, dy, mode);
+    } else {
+      blitResizeNearest(img, destPixels, destOffset, screenW, destW, destH, dx, dy, mode);
+    }
+  }
 
-      switch (mode) {
+  private void blitResizeBilinear(PImage img,
+                                  int[] destPixels, int destOffset, int screenW,
+                                  int destW, int destH,
+                                  int dx, int dy,
+                                  int mode) {
+    // use bilinear filtering
+    iw = img.pixelWidth;
+    iw1 = img.pixelWidth - 1;
+    ih1 = img.pixelHeight - 1;
+
+    switch (mode) {
 
       case BLEND:
         for (int y = 0; y < destH; y++) {
@@ -1990,7 +1835,7 @@ public class PImage implements PConstants, Cloneable {
           for (int x = 0; x < destW; x++) {
             // davbol  - renamed old blend_multiply to blend_blend
             destPixels[destOffset + x] =
-              blend_blend(destPixels[destOffset + x], filter_bilinear());
+                    blend_blend(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2003,7 +1848,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_add_pin(destPixels[destOffset + x], filter_bilinear());
+                    blend_add_pin(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2016,7 +1861,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_sub_pin(destPixels[destOffset + x], filter_bilinear());
+                    blend_sub_pin(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2029,7 +1874,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_lightest(destPixels[destOffset + x], filter_bilinear());
+                    blend_lightest(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2042,7 +1887,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_darkest(destPixels[destOffset + x], filter_bilinear());
+                    blend_darkest(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2067,7 +1912,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_difference(destPixels[destOffset + x], filter_bilinear());
+                    blend_difference(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2080,7 +1925,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_exclusion(destPixels[destOffset + x], filter_bilinear());
+                    blend_exclusion(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2093,7 +1938,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_multiply(destPixels[destOffset + x], filter_bilinear());
+                    blend_multiply(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2106,7 +1951,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_screen(destPixels[destOffset + x], filter_bilinear());
+                    blend_screen(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2119,7 +1964,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_overlay(destPixels[destOffset + x], filter_bilinear());
+                    blend_overlay(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2132,7 +1977,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_hard_light(destPixels[destOffset + x], filter_bilinear());
+                    blend_hard_light(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2145,7 +1990,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_soft_light(destPixels[destOffset + x], filter_bilinear());
+                    blend_soft_light(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2159,7 +2004,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_dodge(destPixels[destOffset + x], filter_bilinear());
+                    blend_dodge(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2172,7 +2017,7 @@ public class PImage implements PConstants, Cloneable {
           filter_new_scanline();
           for (int x = 0; x < destW; x++) {
             destPixels[destOffset + x] =
-              blend_burn(destPixels[destOffset + x], filter_bilinear());
+                    blend_burn(destPixels[destOffset + x], filter_bilinear());
             sX += dx;
           }
           destOffset += screenW;
@@ -2180,245 +2025,249 @@ public class PImage implements PConstants, Cloneable {
         }
         break;
 
+    }
+  }
+
+  private void blitResizeNearest(PImage img,
+                                 int[] destPixels, int destOffset, int screenW,
+                                 int destW, int destH,
+                                 int dx, int dy,
+                                 int mode) {
+    // nearest neighbour scaling (++fast!)
+    int sY;
+    switch (mode) {
+
+    case BLEND:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          // davbol - renamed old blend_multiply to blend_blend
+          destPixels[destOffset + x] =
+            blend_blend(destPixels[destOffset + x],
+                        srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
       }
+      break;
 
-    } else {
-      // nearest neighbour scaling (++fast!)
-      switch (mode) {
-
-      case BLEND:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            // davbol - renamed old blend_multiply to blend_blend
-            destPixels[destOffset + x] =
-              blend_blend(destPixels[destOffset + x],
+    case ADD:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_add_pin(destPixels[destOffset + x],
                           srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
+          sX += dx;
         }
-        break;
-
-      case ADD:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_add_pin(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case SUBTRACT:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_sub_pin(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case LIGHTEST:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_lightest(destPixels[destOffset + x],
-                             srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case DARKEST:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_darkest(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case REPLACE:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] = srcBuffer[sY + (sX >> PRECISIONB)];
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case DIFFERENCE:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_difference(destPixels[destOffset + x],
-                               srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case EXCLUSION:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_exclusion(destPixels[destOffset + x],
-                              srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case MULTIPLY:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_multiply(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case SCREEN:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_screen(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case OVERLAY:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_overlay(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case HARD_LIGHT:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_hard_light(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case SOFT_LIGHT:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_soft_light(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      // davbol - proposed 2007-01-09
-      case DODGE:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_dodge(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
-      case BURN:
-        for (int y = 0; y < destH; y++) {
-          sX = srcXOffset;
-          sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
-          for (int x = 0; x < destW; x++) {
-            destPixels[destOffset + x] =
-              blend_burn(destPixels[destOffset + x],
-                            srcBuffer[sY + (sX >> PRECISIONB)]);
-            sX += dx;
-          }
-          destOffset += screenW;
-          srcYOffset += dy;
-        }
-        break;
-
+        destOffset += screenW;
+        srcYOffset += dy;
       }
+      break;
+
+    case SUBTRACT:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_sub_pin(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case LIGHTEST:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_lightest(destPixels[destOffset + x],
+                           srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case DARKEST:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_darkest(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case REPLACE:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] = srcBuffer[sY + (sX >> PRECISIONB)];
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case DIFFERENCE:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_difference(destPixels[destOffset + x],
+                             srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case EXCLUSION:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_exclusion(destPixels[destOffset + x],
+                            srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case MULTIPLY:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_multiply(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case SCREEN:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_screen(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case OVERLAY:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_overlay(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case HARD_LIGHT:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_hard_light(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case SOFT_LIGHT:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_soft_light(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    // davbol - proposed 2007-01-09
+    case DODGE:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_dodge(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
+
+    case BURN:
+      for (int y = 0; y < destH; y++) {
+        sX = srcXOffset;
+        sY = (srcYOffset >> PRECISIONB) * img.pixelWidth;
+        for (int x = 0; x < destW; x++) {
+          destPixels[destOffset + x] =
+            blend_burn(destPixels[destOffset + x],
+                          srcBuffer[sY + (sX >> PRECISIONB)]);
+          sX += dx;
+        }
+        destOffset += screenW;
+        srcYOffset += dy;
+      }
+      break;
     }
   }
 
 
   private void filter_new_scanline() {
     sX = srcXOffset;
-    fracV = srcYOffset & PREC_MAXVAL;
+    int fracV = srcYOffset & PREC_MAXVAL;
     ifV = PREC_MAXVAL - fracV + 1;
     v1 = (srcYOffset >> PRECISIONB) * iw;
     v2 = min((srcYOffset >> PRECISIONB) + 1, ih1) * iw;
@@ -2426,14 +2275,18 @@ public class PImage implements PConstants, Cloneable {
 
 
   private int filter_bilinear() {
-    fracU = sX & PREC_MAXVAL;
-    ifU = PREC_MAXVAL - fracU + 1;
-    ul = (ifU * ifV) >> PRECISIONB;
-    ll = ifU - ul;
-    ur = ifV - ul;
-    lr = PREC_MAXVAL + 1 - ul - ll - ur;
-    u1 = (sX >> PRECISIONB);
-    u2 = min(u1 + 1, iw1);
+    int cUL, cLL, cUR, cLR;
+    int r, g, b, a;
+
+    // private fields
+    int fracU = sX & PREC_MAXVAL;
+    int ifU = PREC_MAXVAL - fracU + 1;
+    int ul = (ifU * ifV) >> PRECISIONB;
+    int ll = ifU - ul;
+    int ur = ifV - ul;
+    int lr = PREC_MAXVAL + 1 - ul - ll - ur;
+    int u1 = (sX >> PRECISIONB);
+    int u2 = min(u1 + 1, iw1);
 
     // get color values of the 4 neighbouring texels
     cUL = srcBuffer[v1 + u1];
@@ -2507,7 +2360,7 @@ public class PImage implements PConstants, Cloneable {
    * channel in the upper 16 bits and BLUE channel in the lower 16 bits. This
    * decreases the number of operations per pixel and thus makes things faster.
    *
-   * Some of the modes are hand tweaked (various +1s etc.) to be more accurate
+   * Some modes are hand tweaked (various +1s etc.) to be more accurate
    * and to produce correct values in extremes. Below is a sketch you can use
    * to check any blending function for
    *
@@ -2819,10 +2672,11 @@ int testFunction(int dst, int src) {
 
   /**
    * Hard Light
-   * O = OVERLAY(S, D)
+   * <pre>O = OVERLAY(S, D)
    *
    * O = 2 * MULTIPLY(D, S) = 2DS                   for S < 0.5
    * O = 2 * SCREEN(D, S) - 1 = 2(S + D - DS) - 1   otherwise
+   * </pre>
    */
   private static int blend_hard_light(int dst, int src) {
     int a = src >>> 24;
@@ -2855,7 +2709,7 @@ int testFunction(int dst, int src) {
 
 
   /**
-   * Soft Light (Pegtop)
+   * Soft Light (peg top)
    * O = (1 - D) * MULTIPLY(D, S) + D * SCREEN(D, S)
    * O = (1 - D) * DS + D * (1 - (1 - D)(1 - S))
    * O = 2DS + DD - 2DDS
@@ -2943,110 +2797,201 @@ int testFunction(int dst, int src) {
   }
 
 
+
   //////////////////////////////////////////////////////////////
 
   // FILE I/O
 
 
-  static byte TIFF_HEADER[] = {
-    77, 77, 0, 42, 0, 0, 0, 8, 0, 9, 0, -2, 0, 4, 0, 0, 0, 1, 0, 0,
-    0, 0, 1, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 3, 0, 0, 0, 1,
-    0, 0, 0, 0, 1, 2, 0, 3, 0, 0, 0, 3, 0, 0, 0, 122, 1, 6, 0, 3, 0,
-    0, 0, 1, 0, 2, 0, 0, 1, 17, 0, 4, 0, 0, 0, 1, 0, 0, 3, 0, 1, 21,
-    0, 3, 0, 0, 0, 1, 0, 3, 0, 0, 1, 22, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0,
-    1, 23, 0, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8
-  };
+  /**
+   * Targa image loader for RLE-compressed TGA files.
+   * <p>
+   * Rewritten for 0115 to read/write RLE-encoded targa images.
+   * For 0125, non-RLE encoded images are now supported, along with
+   * images whose y-order is reversed (which is standard for TGA files).
+   * <p>
+   * A version of this function is in MovieMaker.java. Any fixes here
+   * should be applied over in MovieMaker as well.
+   * <p>
+   * Known issue with RLE encoding and odd behavior in some apps:
+   * https://github.com/processing/processing/issues/2096
+   * Please help!
+   */
+  static public PImage loadTGA(InputStream input) throws IOException {  // ignore
+    byte[] header = new byte[18];
+    int offset = 0;
+    do {
+      int count = input.read(header, offset, header.length - offset);
+      if (count == -1) return null;
+      offset += count;
+    } while (offset < 18);
 
-
-  static final String TIFF_ERROR =
-    "Error: Processing can only read its own TIFF files.";
-
-  static protected PImage loadTIFF(byte tiff[]) {
-    if ((tiff[42] != tiff[102]) ||  // width/height in both places
-        (tiff[43] != tiff[103])) {
-      System.err.println(TIFF_ERROR);
-      return null;
-    }
-
-    int width =
-      ((tiff[30] & 0xff) << 8) | (tiff[31] & 0xff);
-    int height =
-      ((tiff[42] & 0xff) << 8) | (tiff[43] & 0xff);
-
-    int count =
-      ((tiff[114] & 0xff) << 24) |
-      ((tiff[115] & 0xff) << 16) |
-      ((tiff[116] & 0xff) << 8) |
-      (tiff[117] & 0xff);
-    if (count != width * height * 3) {
-      System.err.println(TIFF_ERROR + " (" + width + ", " + height +")");
-      return null;
-    }
-
-    // check the rest of the header
-    for (int i = 0; i < TIFF_HEADER.length; i++) {
-      if ((i == 30) || (i == 31) || (i == 42) || (i == 43) ||
-          (i == 102) || (i == 103) ||
-          (i == 114) || (i == 115) || (i == 116) || (i == 117)) continue;
-
-      if (tiff[i] != TIFF_HEADER[i]) {
-        System.err.println(TIFF_ERROR + " (" + i + ")");
-        return null;
-      }
-    }
-
-    PImage outgoing = new PImage(width, height, RGB);
-    int index = 768;
-    count /= 3;
-    for (int i = 0; i < count; i++) {
-      outgoing.pixels[i] =
-        0xFF000000 |
-        (tiff[index++] & 0xff) << 16 |
-        (tiff[index++] & 0xff) << 8 |
-        (tiff[index++] & 0xff);
-    }
-    return outgoing;
-  }
-
-
-  protected boolean saveTIFF(OutputStream output) {
-    // shutting off the warning, people can figure this out themselves
     /*
-    if (format != RGB) {
-      System.err.println("Warning: only RGB information is saved with " +
-                         ".tif files. Use .tga or .png for ARGB images and others.");
-    }
+      header[2] image type code
+      2  (0x02) - Uncompressed, RGB images.
+      3  (0x03) - Uncompressed, black and white images.
+      10 (0x0A) - Run-length encoded RGB images.
+      11 (0x0B) - Compressed, black and white images. (grayscale?)
+
+      header[16] is the bit depth (8, 24, 32)
+
+      header[17] image descriptor (packed bits)
+      0x20 is 32 = origin upper-left
+      0x28 is 32 + 8 = origin upper-left + 32 bits
+
+        7  6  5  4  3  2  1  0
+      128 64 32 16  8  4  2  1
     */
-    try {
-      byte tiff[] = new byte[768];
-      System.arraycopy(TIFF_HEADER, 0, tiff, 0, TIFF_HEADER.length);
 
-      tiff[30] = (byte) ((pixelWidth >> 8) & 0xff);
-      tiff[31] = (byte) ((pixelWidth) & 0xff);
-      tiff[42] = tiff[102] = (byte) ((pixelHeight >> 8) & 0xff);
-      tiff[43] = tiff[103] = (byte) ((pixelHeight) & 0xff);
+    int format = 0;
 
-      int count = pixelWidth*pixelHeight*3;
-      tiff[114] = (byte) ((count >> 24) & 0xff);
-      tiff[115] = (byte) ((count >> 16) & 0xff);
-      tiff[116] = (byte) ((count >> 8) & 0xff);
-      tiff[117] = (byte) ((count) & 0xff);
+    if (((header[2] == 3) || (header[2] == 11)) &&  // B&W, plus RLE or not
+        (header[16] == 8) &&  // 8 bits
+        ((header[17] == 0x8) || (header[17] == 0x28))) {  // origin, 32 bit
+      format = ALPHA;
 
-      // spew the header to the disk
-      output.write(tiff);
+    } else if (((header[2] == 2) || (header[2] == 10)) &&  // RGB, RLE or not
+               (header[16] == 24) &&  // 24 bits
+               ((header[17] == 0x20) || (header[17] == 0))) {  // origin
+      format = RGB;
 
-      for (int i = 0; i < pixels.length; i++) {
-        output.write((pixels[i] >> 16) & 0xff);
-        output.write((pixels[i] >> 8) & 0xff);
-        output.write(pixels[i] & 0xff);
-      }
-      output.flush();
-      return true;
-
-    } catch (IOException e) {
-      e.printStackTrace();
+    } else if (((header[2] == 2) || (header[2] == 10)) &&
+               (header[16] == 32) &&
+               ((header[17] == 0x8) || (header[17] == 0x28))) {  // origin, 32
+      format = ARGB;
     }
-    return false;
+
+    if (format == 0) {
+      System.err.println("Unknown .tga file format");
+      return null;
+    }
+
+    int w = ((header[13] & 0xff) << 8) + (header[12] & 0xff);
+    int h = ((header[15] & 0xff) << 8) + (header[14] & 0xff);
+    PImage outgoing = new PImage(w, h, format);
+
+    // where "reversed" means upper-left corner (normal for most of
+    // the modernized world, but "reversed" for the tga spec)
+    //boolean reversed = (header[17] & 0x20) != 0;
+    // https://github.com/processing/processing/issues/1682
+    boolean reversed = (header[17] & 0x20) == 0;
+
+    if ((header[2] == 2) || (header[2] == 3)) {  // not RLE encoded
+      if (reversed) {
+        int index = (h-1) * w;
+        switch (format) {
+        case ALPHA:
+          for (int y = h-1; y >= 0; y--) {
+            for (int x = 0; x < w; x++) {
+              outgoing.pixels[index + x] = input.read();
+            }
+            index -= w;
+          }
+          break;
+        case RGB:
+          for (int y = h-1; y >= 0; y--) {
+            for (int x = 0; x < w; x++) {
+              outgoing.pixels[index + x] =
+                input.read() | (input.read() << 8) | (input.read() << 16) |
+                0xff000000;
+            }
+            index -= w;
+          }
+          break;
+        case ARGB:
+          for (int y = h-1; y >= 0; y--) {
+            for (int x = 0; x < w; x++) {
+              outgoing.pixels[index + x] =
+                input.read() | (input.read() << 8) | (input.read() << 16) |
+                (input.read() << 24);
+            }
+            index -= w;
+          }
+        }
+      } else {  // not reversed
+        int count = w * h;
+        switch (format) {
+        case ALPHA:
+          for (int i = 0; i < count; i++) {
+            outgoing.pixels[i] = input.read();
+          }
+          break;
+        case RGB:
+          for (int i = 0; i < count; i++) {
+            outgoing.pixels[i] =
+              input.read() | (input.read() << 8) | (input.read() << 16) |
+              0xff000000;
+          }
+          break;
+        case ARGB:
+          for (int i = 0; i < count; i++) {
+            outgoing.pixels[i] =
+              input.read() | (input.read() << 8) | (input.read() << 16) |
+              (input.read() << 24);
+          }
+          break;
+        }
+      }
+
+    } else {  // header[2] is 10 or 11
+      int index = 0;
+      int[] px = outgoing.pixels;
+
+      while (index < px.length) {
+        int num = input.read();
+        boolean isRLE = (num & 0x80) != 0;
+        if (isRLE) {
+          num -= 127;  // (num & 0x7F) + 1
+          int pixel = switch (format) {
+            case ALPHA -> input.read();
+            case RGB -> 0xFF000000 |
+              input.read() | (input.read() << 8) | (input.read() << 16);
+            case ARGB -> input.read() |
+              (input.read() << 8) | (input.read() << 16) | (input.read() << 24);
+            default -> 0;
+          };
+          for (int i = 0; i < num; i++) {
+            px[index++] = pixel;
+            if (index == px.length) break;
+          }
+        } else {  // write up to 127 bytes as uncompressed
+          num += 1;
+          switch (format) {
+          case ALPHA:
+            for (int i = 0; i < num; i++) {
+              px[index++] = input.read();
+            }
+            break;
+          case RGB:
+            for (int i = 0; i < num; i++) {
+              px[index++] = 0xFF000000 |
+                input.read() | (input.read() << 8) | (input.read() << 16);
+              //(is.read() << 16) | (is.read() << 8) | is.read();
+            }
+            break;
+          case ARGB:
+            for (int i = 0; i < num; i++) {
+              px[index++] = input.read() | //(is.read() << 24) |
+                (input.read() << 8) | (input.read() << 16) | (input.read() << 24);
+              //(is.read() << 16) | (is.read() << 8) | is.read();
+            }
+            break;
+          }
+        }
+      }
+
+      if (!reversed) {
+        int[] temp = new int[w];
+        for (int y = 0; y < h/2; y++) {
+          int z = (h-1) - y;
+          System.arraycopy(px, y*w, temp, 0, w);
+          System.arraycopy(px, z*w, px, y*w, w);
+          System.arraycopy(temp, 0, px, z*w, w);
+        }
+      }
+    }
+    input.close();
+    return outgoing;
   }
 
 
@@ -3069,7 +3014,7 @@ int testFunction(int dst, int src) {
    * <A HREF="http://www.wotsit.org/download.asp?f=tga">specification</A>
    */
   protected boolean saveTGA(OutputStream output) {
-    byte header[] = new byte[18];
+    byte[] header = new byte[18];
 
      if (format == ALPHA) {  // save ALPHA images as 8bit grayscale
        header[2] = 0x0B;
@@ -3205,142 +3150,19 @@ int testFunction(int dst, int src) {
 
 
   /**
-   * Use ImageIO functions from Java 1.4 and later to handle image save.
-   * Various formats are supported, typically jpeg, png, bmp, and wbmp.
-   * To get a list of the supported formats for writing, use: <BR>
-   * <TT>println(javax.imageio.ImageIO.getReaderFormatNames())</TT>
-   */
-  protected boolean saveImageIO(String path) throws IOException {
-    try {
-      int outputFormat = (format == ARGB) ?
-        BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
-
-      String extension =
-        path.substring(path.lastIndexOf('.') + 1).toLowerCase();
-
-      // JPEG and BMP images that have an alpha channel set get pretty unhappy.
-      // BMP just doesn't write, and JPEG writes it as a CMYK image.
-      // http://code.google.com/p/processing/issues/detail?id=415
-      if (extension.equals("bmp") || extension.equals("jpg") || extension.equals("jpeg")) {
-        outputFormat = BufferedImage.TYPE_INT_RGB;
-      }
-
-      BufferedImage bimage = new BufferedImage(pixelWidth, pixelHeight, outputFormat);
-      bimage.setRGB(0, 0, pixelWidth, pixelHeight, pixels, 0, pixelWidth);
-
-      File file = new File(path);
-
-      ImageWriter writer = null;
-      ImageWriteParam param = null;
-      IIOMetadata metadata = null;
-
-      if (extension.equals("jpg") || extension.equals("jpeg")) {
-        if ((writer = imageioWriter("jpeg")) != null) {
-          // Set JPEG quality to 90% with baseline optimization. Setting this
-          // to 1 was a huge jump (about triple the size), so this seems good.
-          // Oddly, a smaller file size than Photoshop at 90%, but I suppose
-          // it's a completely different algorithm.
-          param = writer.getDefaultWriteParam();
-          param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-          param.setCompressionQuality(0.9f);
-        }
-      }
-
-      if (extension.equals("png")) {
-        if ((writer = imageioWriter("png")) != null) {
-          param = writer.getDefaultWriteParam();
-          if (false) {
-            metadata = imageioDPI(writer, param, 100);
-          }
-        }
-      }
-
-      if (writer != null) {
-        BufferedOutputStream output =
-          new BufferedOutputStream(PApplet.createOutput(file));
-        writer.setOutput(ImageIO.createImageOutputStream(output));
-//        writer.write(null, new IIOImage(bimage, null, null), param);
-        writer.write(metadata, new IIOImage(bimage, null, metadata), param);
-        writer.dispose();
-
-        output.flush();
-        output.close();
-        return true;
-      }
-      // If iter.hasNext() somehow fails up top, it falls through to here
-      return javax.imageio.ImageIO.write(bimage, extension, file);
-
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw new IOException("image save failed.");
-    }
-  }
-
-
-  private ImageWriter imageioWriter(String extension) {
-    Iterator<ImageWriter> iter = ImageIO.getImageWritersByFormatName(extension);
-    if (iter.hasNext()) {
-      return iter.next();
-    }
-    return null;
-  }
-
-
-  private IIOMetadata imageioDPI(ImageWriter writer, ImageWriteParam param, double dpi) {
-    // http://stackoverflow.com/questions/321736/how-to-set-dpi-information-in-an-image
-    ImageTypeSpecifier typeSpecifier =
-      ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_RGB);
-    IIOMetadata metadata =
-      writer.getDefaultImageMetadata(typeSpecifier, param);
-
-    if (!metadata.isReadOnly() && metadata.isStandardMetadataFormatSupported()) {
-      // for PNG, it's dots per millimeter
-      double dotsPerMilli = dpi / 25.4;
-
-      IIOMetadataNode horiz = new IIOMetadataNode("HorizontalPixelSize");
-      horiz.setAttribute("value", Double.toString(dotsPerMilli));
-
-      IIOMetadataNode vert = new IIOMetadataNode("VerticalPixelSize");
-      vert.setAttribute("value", Double.toString(dotsPerMilli));
-
-      IIOMetadataNode dim = new IIOMetadataNode("Dimension");
-      dim.appendChild(horiz);
-      dim.appendChild(vert);
-
-      IIOMetadataNode root = new IIOMetadataNode("javax_imageio_1.0");
-      root.appendChild(dim);
-
-      try {
-        metadata.mergeTree("javax_imageio_1.0", root);
-        return metadata;
-
-      } catch (IIOInvalidTreeException e) {
-        System.err.println("Could not set the DPI of the output image");
-        e.printStackTrace();
-      }
-    }
-    return null;
-  }
-
-
-  protected String[] saveImageFormats;
-
-  /**
-   * ( begin auto-generated from PImage_save.xml )
    *
-   * Saves the image into a file. Append a file extension to the name of 
-   * the file, to indicate the file format to be used: either TIFF (.tif), 
-   * TARGA (.tga), JPEG (.jpg), or PNG (.png). If no extension is included 
-   * in the filename, the image will save in TIFF format and .tif will be 
+   * Saves the image into a file. Append a file extension to the name of
+   * the file, to indicate the file format to be used: either TIFF (.tif),
+   * TARGA (.tga), JPEG (.jpg), or PNG (.png). If no extension is included
+   * in the filename, the image will save in TIFF format and .tif will be
    * added to the name.  These files are saved to the sketch's folder, which
    * may be opened by selecting "Show sketch folder" from the "Sketch" menu.
    * <br /><br />To save an image created within the code, rather
    * than through loading, it's necessary to make the image with the
-   * <b>createImage()</b> function so it is aware of the location of the
+   * <b>createImage()</b> function, so it is aware of the location of the
    * program and can therefore save the file to the right place. See the
    * <b>createImage()</b> reference for more information.
    *
-   * ( end auto-generated )
    * <h3>Advanced</h3>
    * Save this image to disk.
    * <p>
@@ -3358,78 +3180,70 @@ int testFunction(int dst, int src) {
    * To get a list of the supported formats for writing, use: <BR>
    * <TT>println(javax.imageio.ImageIO.getReaderFormatNames())</TT>
    * <p>
-   * To use the original built-in image writers, use .tga or .tif as the
-   * extension, or don't include an extension. When no extension is used,
-   * the extension .tif will be added to the file name.
+   * In Processing 4.0 beta 5, the old (and sometimes buggy) TIFF
+   * reader/writer was removed, so ImageIO is used for TIFF files.
    * <p>
-   * The ImageIO API claims to support wbmp files, however they probably
-   * require a black and white image. Basic testing produced a zero-length
-   * file with no error.
+   * Also, files must have an extension: we're no longer adding .tif to
+   * files with no extension, because that can lead to confusing results,
+   * and the behavior is inconsistent with the rest of the API.
    *
    * @webref pimage:method
-   * @brief Saves the image to a TIFF, TARGA, PNG, or JPEG file
+   * @webBrief Saves the image to a TIFF, TARGA, PNG, or JPEG file
    * @usage application
    * @param filename a sequence of letters and numbers
    */
   public boolean save(String filename) {  // ignore
-    boolean success = false;
+    String path;
 
     if (parent != null) {
       // use savePath(), so that the intermediate directories are created
-      filename = parent.savePath(filename);
+      path = parent.savePath(filename);
 
     } else {
       File file = new File(filename);
       if (file.isAbsolute()) {
         // make sure that the intermediate folders have been created
         PApplet.createPath(file);
+        path = file.getAbsolutePath();
       } else {
         String msg =
           "PImage.save() requires an absolute path. " +
           "Use createImage(), or pass savePath() to save().";
         PGraphics.showException(msg);
+        return false;
       }
     }
+    return saveImpl(path);
+  }
 
+
+  /**
+   * Override this in subclasses to intercept save calls for other formats
+   * or higher-performance implementations. When reaching this code, pixels
+   * must be loaded and that path should be absolute.
+   *
+   * @param path must be a full path (not relative or simply a filename)
+   */
+  protected boolean saveImpl(String path) {
     // Make sure the pixel data is ready to go
     loadPixels();
+    boolean success;
 
     try {
-      OutputStream os = null;
+      final String lower = path.toLowerCase();
 
-      if (saveImageFormats == null) {
-        saveImageFormats = javax.imageio.ImageIO.getWriterFormatNames();
-      }
-      if (saveImageFormats != null) {
-        for (int i = 0; i < saveImageFormats.length; i++) {
-          if (filename.endsWith("." + saveImageFormats[i])) {
-            if (!saveImageIO(filename)) {
-              System.err.println("Error while saving image.");
-              return false;
-            }
-            return true;
-          }
-        }
-      }
-
-      if (filename.toLowerCase().endsWith(".tga")) {
-        os = new BufferedOutputStream(new FileOutputStream(filename), 32768);
+      if (lower.endsWith(".tga")) {
+        OutputStream os = new BufferedOutputStream(new FileOutputStream(path), 32768);
         success = saveTGA(os); //, pixels, width, height, format);
+        os.close();
 
       } else {
-        if (!filename.toLowerCase().endsWith(".tif") &&
-            !filename.toLowerCase().endsWith(".tiff")) {
-          // if no .tif extension, add it..
-          filename += ".tif";
-        }
-        os = new BufferedOutputStream(new FileOutputStream(filename), 32768);
-        success = saveTIFF(os); //, pixels, width, height);
+        // TODO Imperfect, possibly temporary solution for 4.x releases
+        //      https://github.com/processing/processing4/wiki/Exorcising-AWT
+        success = ShimAWT.saveImage(this, path);
       }
-      os.flush();
-      os.close();
-
     } catch (IOException e) {
-      System.err.println("Error while saving image.");
+      System.err.println("Error while saving " + path);
       e.printStackTrace();
       success = false;
     }

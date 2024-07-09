@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2012-15 The Processing Foundation
+  Copyright (c) 2012-22 The Processing Foundation
   Copyright (c) 2006-12 Ben Fry and Casey Reas
   Copyright (c) 2004-06 Michael Chang
 
@@ -121,7 +121,7 @@ public class PShapeSVG extends PShape {
     this(null, svg, true);
 
     if (!svg.getName().equals("svg")) {
-      if (svg.getName().toLowerCase().equals("html")) {
+      if (svg.getName().equalsIgnoreCase("html")) {
         // Common case is that files aren't downloaded properly
         throw new RuntimeException("This appears to be a web page, not an SVG file.");
       } else {
@@ -515,6 +515,7 @@ public class PShapeSVG extends PShape {
 
     StringBuilder pathBuffer = new StringBuilder();
     boolean lastSeparate = false;
+    boolean isOnDecimal = false;
 
     for (int i = 0; i < pathDataChars.length; i++) {
       char c = pathDataChars[i];
@@ -539,9 +540,16 @@ public class PShapeSVG extends PShape {
       if (c == 'Z' || c == 'z') {
         separate = false;
       }
+      if (c == '.' && !isOnDecimal) {
+        isOnDecimal = true;
+      }
+      else if (isOnDecimal && (c < '0' || c > '9')) {
+        pathBuffer.append("|");
+        isOnDecimal = c == '.';
+      }
       if (c == '-' && !lastSeparate) {
         // allow for 'e' notation in numbers, e.g. 2.10e-9
-        // http://dev.processing.org/bugs/show_bug.cgi?id=1408
+        // https://download.processing.org/bugzilla/1408.html
         if (i == 0 || pathDataChars[i-1] != 'e') {
           pathBuffer.append("|");
         }
@@ -566,7 +574,6 @@ public class PShapeSVG extends PShape {
     int i = 0;
 
     char implicitCommand = '\0';
-//    char prevCommand = '\0';
     boolean prevCurve = false;
     float ctrlX, ctrlY;
     // store values for closepath so that relative coords work properly
@@ -575,7 +582,7 @@ public class PShapeSVG extends PShape {
 
     while (i < pathTokens.length) {
       char c = pathTokens[i].charAt(0);
-      if (((c >= '0' && c <= '9') || (c == '-')) && implicitCommand != '\0') {
+      if (((c >= '0' && c <= '9') || (c == '-') || (c == '.')) && implicitCommand != '\0') {
         c = implicitCommand;
         i--;
       } else {
@@ -864,7 +871,7 @@ public class PShapeSVG extends PShape {
       case 'z':
         // since closing the path, the 'current' point needs
         // to return back to the last moveto location.
-        // http://code.google.com/p/processing/issues/detail?id=1058
+        // https://github.com/processing/processing/issues/1096
         cx = movetoX;
         cy = movetoY;
         close = true;
@@ -1499,7 +1506,7 @@ public class PShapeSVG extends PShape {
     public Gradient(PShapeSVG parent, XML properties) {
       super(parent, properties, true);
 
-      XML elements[] = properties.getChildren();
+      XML[] elements = properties.getChildren();
       offset = new float[elements.length];
       color = new int[elements.length];
 
@@ -1555,7 +1562,7 @@ public class PShapeSVG extends PShape {
         properties.getString("gradientTransform");
 
       if (transformStr != null) {
-        float t[] = parseTransform(transformStr).get(null);
+        float[] t = parseTransform(transformStr).get(null);
         this.transform = new AffineTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
 
         Point2D t1 = transform.transform(new Point2D.Float(x1, y1), null);
@@ -1587,7 +1594,7 @@ public class PShapeSVG extends PShape {
         properties.getString("gradientTransform");
 
       if (transformStr != null) {
-        float t[] = parseTransform(transformStr).get(null);
+        float[] t = parseTransform(transformStr).get(null);
         this.transform = new AffineTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
 
         Point2D t1 = transform.transform(new Point2D.Float(cx, cy), null);

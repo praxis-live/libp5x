@@ -21,7 +21,6 @@
   <modules>
     <module>processing-core</module>
     <module>processing-lwjgl</module>
-    <module>processing-java2d</module>
   </modules>
 
   <scm>

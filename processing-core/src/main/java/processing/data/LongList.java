@@ -15,15 +15,14 @@ import processing.core.PApplet;
 
 
 /**
- * Helper class for a list of ints. Lists are designed to have some of the
- * features of ArrayLists, but to maintain the simplicity and efficiency of
- * working with arrays.
+ * Helper class for a list of <b>long</b> values. Lists are designed
+ * to have some features of <b>ArrayList</b>, but to maintain the
+ * simplicity and efficiency of working with arrays.
+ * Functions such as <b>sort()</b> and <b>shuffle()</b> always act on
+ * the list itself. To get a sorted copy, use <b>list.copy().sort()</b>.
  *
- * Functions like sort() and shuffle() always act on the list itself. To get
- * a sorted copy, use list.copy().sort().
- *
- * @webref data:composite
- * @see FloatList
+ * @nowebref
+ * @see IntList
  * @see StringList
  */
 public class LongList implements Iterable<Long> {
@@ -31,6 +30,7 @@ public class LongList implements Iterable<Long> {
   protected long[] data;
 
 
+  @SuppressWarnings("unused")
   public LongList() {
     data = new long[10];
   }
@@ -47,7 +47,7 @@ public class LongList implements Iterable<Long> {
   /**
    * @nowebref
    */
-  public LongList(int[] source) {
+  public LongList(long[] source) {
     count = source.length;
     data = new long[count];
     System.arraycopy(source, 0, data, 0, count);
@@ -56,13 +56,14 @@ public class LongList implements Iterable<Long> {
 
   /**
    * Construct an IntList from an iterable pile of objects.
-   * For instance, a float array, an array of strings, who knows).
-   * Un-parseable or null values will be set to 0.
+   * For instance, a float array, an array of strings, who knows.
+   * Un-parsable or null values will be set to 0.
    * @nowebref
    */
-  public LongList(Iterable<Object> iter) {
+  @SuppressWarnings("unused")
+  public LongList(Iterable<Object> iterable) {
     this(10);
-    for (Object o : iter) {
+    for (Object o : iterable) {
       if (o == null) {
         append(0);  // missing value default
       } else if (o instanceof Number) {
@@ -77,21 +78,24 @@ public class LongList implements Iterable<Long> {
 
   /**
    * Construct an IntList from a random pile of objects.
-   * Un-parseable or null values will be set to zero.
+   * Un-parsable or null values will be set to zero.
    */
+  @SuppressWarnings("unused")
   public LongList(Object... items) {
-    final int missingValue = 0;  // nuts, can't be last/final/second arg
+    final long missingValue = 0;  // nuts, can't be last/final/second arg
 
     count = items.length;
     data = new long[count];
     int index = 0;
     for (Object o : items) {
-      int value = missingValue;
+      long value = missingValue;
       if (o != null) {
         if (o instanceof Number) {
-          value = ((Number) o).intValue();
+          value = ((Number) o).longValue();
         } else {
-          value = PApplet.parseInt(o.toString().trim(), missingValue);
+          try {
+            value = Long.parseLong(o.toString().trim());
+          } catch (NumberFormatException ignored) { }
         }
       }
       data[index++] = value;
@@ -99,6 +103,7 @@ public class LongList implements Iterable<Long> {
   }
 
 
+  @SuppressWarnings("unused")
   static public LongList fromRange(int stop) {
     return fromRange(0, stop);
   }
@@ -131,7 +136,7 @@ public class LongList implements Iterable<Long> {
    * Get the length of the list.
    *
    * @webref intlist:method
-   * @brief Get the length of the list
+   * @webBrief Get the length of the list
    */
   public int size() {
     return count;
@@ -155,7 +160,7 @@ public class LongList implements Iterable<Long> {
    * Remove all entries from the list.
    *
    * @webref intlist:method
-   * @brief Remove all entries from the list
+   * @webBrief Remove all entries from the list
    */
   public void clear() {
     count = 0;
@@ -166,7 +171,7 @@ public class LongList implements Iterable<Long> {
    * Get an entry at a particular index.
    *
    * @webref intlist:method
-   * @brief Get an entry at a particular index
+   * @webBrief Get an entry at a particular index
    */
   public long get(int index) {
     if (index >= this.count) {
@@ -182,7 +187,7 @@ public class LongList implements Iterable<Long> {
    * entries with 0s.
    *
    * @webref intlist:method
-   * @brief Set the entry at a particular index
+   * @webBrief Set the entry at a particular index
    */
   public void set(int index, int what) {
     if (index >= count) {
@@ -216,7 +221,7 @@ public class LongList implements Iterable<Long> {
    * Remove an element from the specified index
    *
    * @webref intlist:method
-   * @brief Remove an element from the specified index
+   * @webBrief Remove an element from the specified index
    */
   public long remove(int index) {
     if (index < 0 || index >= count) {
@@ -240,6 +245,7 @@ public class LongList implements Iterable<Long> {
 
   // Remove the first instance of a particular value,
   // and return the index at which it was found.
+  @SuppressWarnings("unused")
   public int removeValue(int value) {
     int index = index(value);
     if (index != -1) {
@@ -252,6 +258,7 @@ public class LongList implements Iterable<Long> {
 
   // Remove all instances of a particular value,
   // and return the number of values found and removed
+  @SuppressWarnings("unused")
   public int removeValues(int value) {
     int ii = 0;
     for (int i = 0; i < count; i++) {
@@ -269,7 +276,7 @@ public class LongList implements Iterable<Long> {
    * Add a new entry to the list.
    *
    * @webref intlist:method
-   * @brief Add a new entry to the list
+   * @webBrief Add a new entry to the list
    */
   public void append(long value) {
     if (count == data.length) {
@@ -294,6 +301,7 @@ public class LongList implements Iterable<Long> {
 
 
   /** Add this value, but only if it's not already in the list. */
+  @SuppressWarnings("unused")
   public void appendUnique(int value) {
     if (!hasValue(value)) {
       append(value);
@@ -370,60 +378,8 @@ public class LongList implements Iterable<Long> {
   }
 
 
-    // below are aborted attempts at more optimized versions of the code
-    // that are harder to read and debug...
-
-//    if (index + values.length >= count) {
-//      // We're past the current 'count', check to see if we're still allocated
-//      // index 9, data.length = 10, values.length = 1
-//      if (index + values.length < data.length) {
-//        // There's still room for these entries, even though it's past 'count'.
-//        // First clear out the entries leading up to it, however.
-//        for (int i = count; i < index; i++) {
-//          data[i] = 0;
-//        }
-//        data[index] =
-//      }
-//      if (index >= data.length) {
-//        int length = index + values.length;
-//        int[] temp = new int[length];
-//        System.arraycopy(data, 0, temp, 0, count);
-//        System.arraycopy(values, 0, temp, index, values.length);
-//        data = temp;
-//        count = data.length;
-//      } else {
-//
-//      }
-//
-//    } else if (count == data.length) {
-//      int[] temp = new int[count << 1];
-//      System.arraycopy(data, 0, temp, 0, index);
-//      temp[index] = value;
-//      System.arraycopy(data, index, temp, index+1, count - index);
-//      data = temp;
-//
-//    } else {
-//      // data[] has room to grow
-//      // for() loop believed to be faster than System.arraycopy over itself
-//      for (int i = count; i > index; --i) {
-//        data[i] = data[i-1];
-//      }
-//      data[index] = value;
-//      count++;
-//    }
-
-
   /** Return the first index of a particular value. */
   public int index(int what) {
-    /*
-    if (indexCache != null) {
-      try {
-        return indexCache.get(what);
-      } catch (Exception e) {  // not there
-        return -1;
-      }
-    }
-    */
     for (int i = 0; i < count; i++) {
       if (data[i] == what) {
         return i;
@@ -433,24 +389,13 @@ public class LongList implements Iterable<Long> {
   }
 
 
-  // !!! TODO this is not yet correct, because it's not being reset when
-  // the rest of the entries are changed
-//  protected void cacheIndices() {
-//    indexCache = new HashMap<Integer, Integer>();
-//    for (int i = 0; i < count; i++) {
-//      indexCache.put(data[i], i);
-//    }
-//  }
-
   /**
+   * Check if a number is a part of the list
+   *
    * @webref intlist:method
-   * @brief Check if a number is a part of the list
+   * @webBrief Check if a number is a part of the list
    */
   public boolean hasValue(int value) {
-//    if (indexCache == null) {
-//      cacheIndices();
-//    }
-//    return index(what) != -1;
     for (int i = 0; i < count; i++) {
       if (data[i] == value) {
         return true;
@@ -460,8 +405,10 @@ public class LongList implements Iterable<Long> {
   }
 
   /**
+   * Add one to a value
+   *
    * @webref intlist:method
-   * @brief Add one to a value
+   * @webBrief Add one to a value
    */
   public void increment(int index) {
     if (count <= index) {
@@ -479,8 +426,10 @@ public class LongList implements Iterable<Long> {
 
 
   /**
+   * Add to a value
+   *
    * @webref intlist:method
-   * @brief Add to a value
+   * @webBrief Add to a value
    */
   public void add(int index, int amount) {
     if (index < count) {
@@ -491,8 +440,10 @@ public class LongList implements Iterable<Long> {
   }
 
   /**
+   * Subtract from a value
+   *
    * @webref intlist:method
-   * @brief Subtract from a value
+   * @webBrief Subtract from a value
    */
   public void sub(int index, int amount) {
     if (index < count) {
@@ -503,8 +454,10 @@ public class LongList implements Iterable<Long> {
   }
 
   /**
+   * Multiply a value
+   *
    * @webref intlist:method
-   * @brief Multiply a value
+   * @webBrief Multiply a value
    */
   public void mult(int index, int amount) {
     if (index < count) {
@@ -515,8 +468,10 @@ public class LongList implements Iterable<Long> {
   }
 
   /**
+   * Divide a value
+   *
    * @webref intlist:method
-   * @brief Divide a value
+   * @webBrief Divide a value
    */
   public void div(int index, int amount) {
     if (index < count) {
@@ -538,8 +493,10 @@ public class LongList implements Iterable<Long> {
 
 
   /**
+   * Return the smallest value
+   *
    * @webref intlist:method
-   * @brief Return the smallest value
+   * @webBrief Return the smallest value
    */
   public long min() {
     checkMinMax("min");
@@ -553,6 +510,7 @@ public class LongList implements Iterable<Long> {
 
   // returns the index of the minimum value.
   // if there are ties, it returns the first one found.
+  @SuppressWarnings("unused")
   public int minIndex() {
     checkMinMax("minIndex");
     long value = data[0];
@@ -568,8 +526,10 @@ public class LongList implements Iterable<Long> {
 
 
   /**
+   * Return the largest value
+   * 
    * @webref intlist:method
-   * @brief Return the largest value
+   * @webBrief Return the largest value
    */
   public long max() {
     checkMinMax("max");
@@ -622,7 +582,7 @@ public class LongList implements Iterable<Long> {
    * Sorts the array in place.
    *
    * @webref intlist:method
-   * @brief Sorts the array, lowest to highest
+   * @webBrief Sorts the array, lowest to highest
    */
   public void sort() {
     Arrays.sort(data, 0, count);
@@ -633,7 +593,7 @@ public class LongList implements Iterable<Long> {
    * Reverse sort, orders values from highest to lowest.
    *
    * @webref intlist:method
-   * @brief Reverse sort, orders values from highest to lowest
+   * @webBrief Reverse sort, orders values from highest to lowest
    */
   public void sortReverse() {
     new Sort() {
@@ -658,26 +618,11 @@ public class LongList implements Iterable<Long> {
   }
 
 
-  // use insert()
-//  public void splice(int index, int value) {
-//  }
-
-
-//  public void subset(int start) {
-//    subset(start, count - start);
-//  }
-//
-//
-//  public void subset(int start, int num) {
-//    for (int i = 0; i < num; i++) {
-//      data[i] = data[i+start];
-//    }
-//    count = num;
-//  }
-
   /**
+   * Reverse the order of the list elements
+   *
    * @webref intlist:method
-   * @brief Reverse the order of the list elements
+   * @webBrief Reverse the order of the list elements
    */
   public void reverse() {
     int ii = count - 1;
@@ -692,11 +637,12 @@ public class LongList implements Iterable<Long> {
 
   /**
    * Randomize the order of the list elements. Note that this does not
-   * obey the randomSeed() function in PApplet.
+   * obey the <b>randomSeed()</b> function in PApplet.
    *
    * @webref intlist:method
-   * @brief Randomize the order of the list elements
+   * @webBrief Randomize the order of the list elements
    */
+  @SuppressWarnings("unused")
   public void shuffle() {
     Random r = new Random();
     int num = count;
@@ -714,6 +660,7 @@ public class LongList implements Iterable<Long> {
    * Randomize the list order using the random() function from the specified
    * sketch, allowing shuffle() to use its current randomSeed() setting.
    */
+  @SuppressWarnings("unused")
   public void shuffle(PApplet sketch) {
     int num = count;
     while (num > 1) {
@@ -723,6 +670,33 @@ public class LongList implements Iterable<Long> {
       data[num] = data[value];
       data[value] = temp;
     }
+  }
+
+
+  /**
+   * Return a random value from the list.
+   */
+  public long choice() {
+    return data[(int) (Math.random() * count)];
+  }
+
+
+  // see notes in StringList
+//  /**
+//   * Return a random value from the list, using the
+//   * randomSeed() from the specified sketch object.
+//   */
+//  public long choice(PApplet sketch) {
+//    return data[(int) sketch.random(count)];
+//  }
+
+
+  public long removeChoice() {
+    if (count == 0) {
+      throw new ArrayIndexOutOfBoundsException("No entries in this IntList");
+    }
+    int index = (int) (Math.random() * count);
+    return remove(index);
   }
 
 
@@ -746,8 +720,7 @@ public class LongList implements Iterable<Long> {
 
   @Override
   public Iterator<Long> iterator() {
-//  public Iterator<Integer> valueIterator() {
-    return new Iterator<Long>() {
+    return new Iterator<>() {
       int index = -1;
 
       public void remove() {
@@ -771,80 +744,37 @@ public class LongList implements Iterable<Long> {
    *
    * @return an array sized by the length of the list with each of the values.
    * @webref intlist:method
-   * @brief Create a new array with a copy of all the values
+   * @webBrief Create a new array with a copy of all the values
    */
-  public int[] array() {
-    return array(null);
+  public long[] toArray() {
+    return toArray(null);
   }
 
 
   /**
-   * Copy values into the specified array. If the specified array is null or
-   * not the same size, a new array will be allocated.
-   * @param array
+   * Copy values into the specified array. If the specified array is
+   * null or not the same size, a new array will be allocated.
    */
-  public int[] array(int[] array) {
+  public long[] toArray(long[] array) {
     if (array == null || array.length != count) {
-      array = new int[count];
+      array = new long[count];
     }
     System.arraycopy(data, 0, array, 0, count);
     return array;
   }
 
 
-//  public int[] toIntArray() {
-//    int[] outgoing = new int[count];
-//    for (int i = 0; i < count; i++) {
-//      outgoing[i] = (int) data[i];
-//    }
-//    return outgoing;
-//  }
-
-
-//  public long[] toLongArray() {
-//    long[] outgoing = new long[count];
-//    for (int i = 0; i < count; i++) {
-//      outgoing[i] = (long) data[i];
-//    }
-//    return outgoing;
-//  }
-
-
-//  public float[] toFloatArray() {
-//    float[] outgoing = new float[count];
-//    System.arraycopy(data, 0, outgoing, 0, count);
-//    return outgoing;
-//  }
-
-
-//  public double[] toDoubleArray() {
-//    double[] outgoing = new double[count];
-//    for (int i = 0; i < count; i++) {
-//      outgoing[i] = data[i];
-//    }
-//    return outgoing;
-//  }
-
-
-//  public String[] toStringArray() {
-//    String[] outgoing = new String[count];
-//    for (int i = 0; i < count; i++) {
-//      outgoing[i] = String.valueOf(data[i]);
-//    }
-//    return outgoing;
-//  }
-
-
   /**
-   * Returns a normalized version of this array. Called getPercent() for
-   * consistency with the Dict classes. It's a getter method because it needs
-   * to returns a new list (because IntList/Dict can't do percentages or
-   * normalization in place on int values).
+   * Returns a normalized version of this array. Called getPercent()
+   * for consistency with the Dict classes. It's a get method because
+   * it needs to return a new list (because IntList/Dict can't do
+   * percentages or normalization in place on int values).
    */
+  @SuppressWarnings("unused")
   public FloatList getPercent() {
     double sum = 0;
-    for (float value : array()) {
-      sum += value;
+    for (int i = 0; i < count; i++) {
+      sum += data[i];
     }
     FloatList outgoing = new FloatList(count);
     for (int i = 0; i < count; i++) {
@@ -855,26 +785,14 @@ public class LongList implements Iterable<Long> {
   }
 
 
-//  /**
-//   * Count the number of times each entry is found in this list.
-//   * Converts each entry to a String so it can be used as a key.
-//   */
-//  public IntDict getTally() {
-//    IntDict outgoing = new IntDict();
-//    for (int i = 0; i < count; i++) {
-//      outgoing.increment(String.valueOf(data[i]));
-//    }
-//    return outgoing;
-//  }
-
-
+  @SuppressWarnings("unused")
   public LongList getSubset(int start) {
     return getSubset(start, count - start);
   }
 
 
   public LongList getSubset(int start, int num) {
-    int[] subset = new int[num];
+    long[] subset = new long[num];
     System.arraycopy(data, start, subset, 0, num);
     return new LongList(subset);
   }
