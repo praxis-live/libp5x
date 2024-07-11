@@ -1,6 +1,12 @@
 /* -*- mode: java; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 
 /*
+ * Adapted for libp5x.
+ *
+ * Changes copyright (c) 2024 Neil C Smith
+ */
+
+/*
   Part of the Processing project - http://processing.org
 
   Copyright (c) 2018 Andres Colubri
