@@ -3433,15 +3433,15 @@ public class PApplet implements PConstants {
       handleMethods("dispose");
     }
 
-    if (platform == MACOS) {
-      try {
-        final String td = "processing.core.ThinkDifferent";
-        final Class<?> thinkDifferent = getClass().getClassLoader().loadClass(td);
-        thinkDifferent.getMethod("cleanup").invoke(null);
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
-    }
+//    if (platform == MACOS) {
+//      try {
+//        final String td = "processing.core.ThinkDifferent";
+//        final Class<?> thinkDifferent = getClass().getClassLoader().loadClass(td);
+//        thinkDifferent.getMethod("cleanup").invoke(null);
+//      } catch (Exception e) {
+//        e.printStackTrace();
+//      }
+//    }
 
   }
 
@@ -10246,40 +10246,40 @@ public class PApplet implements PConstants {
 
   /** Convenience method, should only be called by PSurface subclasses. */
   static public void hideMenuBar() {
-    if (platform == MACOS) {
-      // Call some native code to remove the menu bar on macOS. Not necessary
-      // on Linux and Windows, who are happy to make full screen windows.
-      try {
-        final String td = "processing.core.ThinkDifferent";
-        final Class<?> thinkDifferent = PApplet.class.getClassLoader().loadClass(td);
-        thinkDifferent.getMethod("hideMenuBar").invoke(null);
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
-    }
+//    if (platform == MACOS) {
+//      // Call some native code to remove the menu bar on macOS. Not necessary
+//      // on Linux and Windows, who are happy to make full screen windows.
+//      try {
+//        final String td = "processing.core.ThinkDifferent";
+//        final Class<?> thinkDifferent = PApplet.class.getClassLoader().loadClass(td);
+//        thinkDifferent.getMethod("hideMenuBar").invoke(null);
+//      } catch (Exception e) {
+//        e.printStackTrace();
+//      }
+//    }
   }
 
 
-  /**
-   * Find the location of fenster.exe by walking through java.library.path.
-   * (It will be on the path because it's part of core/library/windows-amd64)
-   */
-  static private String findFenster() {
-    String libraryPath = System.getProperty("java.library.path");
-    // Should not be null, but cannot assume
-    if (libraryPath != null) {
-      String[] folders = split(libraryPath, ';');
-      // Usually, the most relevant paths will be at the front of the list,
-      // so hopefully this will not walk several entries.
-      for (String folder : folders) {
-        File file = new File(folder, "fenster.exe");
-        if (file.exists()) {
-          return file.getAbsolutePath();
-        }
-      }
-    }
-    return null;
-  }
+//  /**
+//   * Find the location of fenster.exe by walking through java.library.path.
+//   * (It will be on the path because it's part of core/library/windows-amd64)
+//   */
+//  static private String findFenster() {
+//    String libraryPath = System.getProperty("java.library.path");
+//    // Should not be null, but cannot assume
+//    if (libraryPath != null) {
+//      String[] folders = split(libraryPath, ';');
+//      // Usually, the most relevant paths will be at the front of the list,
+//      // so hopefully this will not walk several entries.
+//      for (String folder : folders) {
+//        File file = new File(folder, "fenster.exe");
+//        if (file.exists()) {
+//          return file.getAbsolutePath();
+//        }
+//      }
+//    }
+//    return null;
+//  }
 
 
   /**
@@ -10287,15 +10287,15 @@ public class PApplet implements PConstants {
    * More <a href="https://github.com/processing/processing4/tree/master/build/windows/fenster">here</a>.
    */
   static private int getWindowsDPI() {
-    String fensterPath = findFenster();
-    if (fensterPath != null) {
-      StringList stdout = new StringList();
-      StringList stderr = new StringList();
-      int result = exec(stdout, stderr, fensterPath);
-      if (result == 0) {
-        return parseInt(stdout.join(""), 0);
-      }
-    }
+//    String fensterPath = findFenster();
+//    if (fensterPath != null) {
+//      StringList stdout = new StringList();
+//      StringList stderr = new StringList();
+//      int result = exec(stdout, stderr, fensterPath);
+//      if (result == 0) {
+//        return parseInt(stdout.join(""), 0);
+//      }
+//    }
     return 0;
   }
 
