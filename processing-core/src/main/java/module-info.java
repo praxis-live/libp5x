@@ -11,6 +11,7 @@ module org.praxislive.libp5x.core {
     exports processing.event;
     exports processing.opengl;
     
+    opens processing.awt;
     opens processing.core;
     opens processing.data;
     opens processing.event;
