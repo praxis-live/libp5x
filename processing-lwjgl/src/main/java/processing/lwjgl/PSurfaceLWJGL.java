@@ -1,6 +1,12 @@
 /* -*- mode: java; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 
 /*
+ * Adapted for libp5x.
+ *
+ * Changes copyright (c) 2024 Neil C Smith
+ */
+
+/*
   Part of the Processing project - http://processing.org
 
   Copyright (c) 2018 Andres Colubri
@@ -22,6 +28,7 @@
 
 package processing.lwjgl;
 
+import java.io.File;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.GL;
@@ -54,6 +61,7 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL31C.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
+import processing.awt.ShimAWT;
 
 public class PSurfaceLWJGL implements PSurface {
 
@@ -998,13 +1006,6 @@ public class PSurfaceLWJGL implements PSurface {
     glfwSetWindowMonitor(window, monitor, 0, 0, monitorRect.w, monitorRect.h, GLFW_DONT_CARE);
   }
 
-
-  @Override
-  public void setupExternalMessages() {
-    external = true;
-  }
-
-
   @Override
   public void setLocation(int x, int y) {
       
@@ -1275,6 +1276,31 @@ public class PSurfaceLWJGL implements PSurface {
   public boolean isStopped() {
     return !threadRunning;
   }
+
+    @Override
+    public PImage loadImage(String path, Object... args) {
+        return ShimAWT.loadImage(sketch, path, args);
+    }
+
+    @Override
+    public boolean openLink(String url) {
+        return ShimAWT.openLink(url);
+    }
+
+    @Override
+    public void selectInput(String prompt, String callback, File file, Object callbackObject) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public void selectOutput(String prompt, String callback, File file, Object callbackObject) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public void selectFolder(String prompt, String callback, File file, Object callbackObject) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
 
   
   /**

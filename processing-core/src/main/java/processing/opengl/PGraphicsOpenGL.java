@@ -1,9 +1,15 @@
 /* -*- mode: java; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 
 /*
+ * Adapted for libp5x.
+ *
+ * Changes copyright (c) 2024 Neil C Smith
+ */
+
+/*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2012-15 The Processing Foundation
+  Copyright (c) 2012-21 The Processing Foundation
   Copyright (c) 2004-12 Ben Fry and Casey Reas
   Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -53,7 +59,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   // Using the technique alternative to finalization described in:
   // http://www.oracle.com/technetwork/articles/java/finalization-137655.html
   private static ReferenceQueue<Object> refQueue = new ReferenceQueue<>();
-  private static List<Disposable<? extends Object>> reachableWeakReferences =
+  private static List<Disposable<?>> reachableWeakReferences =
     new LinkedList<>();
 
   static final private int MAX_DRAIN_GLRES_ITERATIONS = 10;
@@ -61,8 +67,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   static void drainRefQueueBounded() {
     int iterations = 0;
     while (iterations < MAX_DRAIN_GLRES_ITERATIONS) {
-      Disposable<? extends Object> res =
-        (Disposable<? extends Object>) refQueue.poll();
+      Disposable<?> res =
+        (Disposable<?>) refQueue.poll();
       if (res == null) {
         break;
       }
@@ -239,7 +245,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   protected AsyncPixelReader asyncPixelReader;
   protected boolean asyncPixelReaderInitialized;
 
-  // Keeps track of ongoing transfers so they can be finished.
+  // Keeps track of ongoing transfers so that they can be finished.
   // Set is copied to the List when we need to iterate it
   // so that readers can remove themselves from the Set during
   // iteration if they don't have any ongoing transfers.
@@ -575,9 +581,14 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     viewport = PGL.allocateIntBuffer(4);
 
+    PGL.bufferUsageRetained = PGL.DYNAMIC_DRAW;
+    PGL.bufferUsageImmediate = PGL.STATIC_DRAW;
+    PGL.bufferMapAccess = PGL.READ_WRITE;
+
     polyAttribs = newAttributeMap();
     inGeo = newInGeometry(this, polyAttribs, IMMEDIATE);
-    tessGeo = newTessGeometry(this, polyAttribs, IMMEDIATE);
+    tessGeo = newTessGeometry(this, polyAttribs, IMMEDIATE,
+                              PGL.bufferStreamingImmediate);
     texCache = newTexCache(this);
 
     projection = new PMatrix3D();
@@ -751,20 +762,35 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 //  }
 
 
+  @Override
   public boolean saveImpl(String filename) {
-//    return super.save(filename); // ASYNC save frame using PBOs not yet available on Android
+    // ASYNC save frame using PBOs not yet available on Android
+    //return super.save(filename);
+
+    // In 4.0 beta 5, the loadPixels() call is moved into saveImpl(),
+    // otherwise it undermines part of the point to having optimized
+    // image writing methods in subclasses (which presumably might be
+    // able to write directly from frame buffer to file).
+    loadPixels();
 
     if (getHint(DISABLE_ASYNC_SAVEFRAME)) {
-      // Act as an opaque surface for the purposes of saving.
       if (primaryGraphics) {
+        // Act as an opaque surface while saving
         int prevFormat = format;
         format = RGB;
-        boolean result = super.save(filename);
+        if (pixels == null) {
+          // Workaround for an NPE caused by resize events:
+          // https://github.com/processing/processing4/issues/162
+          // But there's a larger problem at play here:
+          // https://github.com/processing/processing4/issues/385
+          System.err.println("Not saving image because pixels not ready.");
+          return false;
+        }
+        boolean result = super.saveImpl(filename);
         format = prevFormat;
         return result;
       }
-
-      return super.save(filename);
+      return super.saveImpl(filename);
     }
 
     if (asyncImageSaver == null) {
@@ -792,6 +818,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       asyncPixelReader.readAndSaveAsync(parent.sketchFile(filename));
 
       if (needEndDraw) endDraw();
+
     } else {
       // async transfer is not supported or
       // pixels are already in memory, just do async save
@@ -869,11 +896,10 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int glName;
 
     private PGL pgl;
-    private int context;
+    private final int context;
 
     public GLResourceTexture(Texture tex) {
       super(tex);
-
 
       pgl = tex.pg.getPrimaryPGL();
       pgl.genTextures(1, intBuffer);
@@ -919,7 +945,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int glId;
 
     private PGL pgl;
-    private int context;
+    final private int context;
 
     public GLResourceVertexBuffer(VertexBuffer vbo) {
       super(vbo);
@@ -970,7 +996,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int glFragment;
 
     private PGL pgl;
-    private int context;
+    final private int context;
 
     public GLResourceShader(PShader sh) {
       super(sh);
@@ -1038,7 +1064,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int glMultisample;
 
     private PGL pgl;
-    private int context;
+    final private int context;
 
     public GLResourceFrameBuffer(FrameBuffer fb) {
       super(fb);
@@ -1186,20 +1212,20 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   // FRAME RENDERING
 
 
-  protected void createPolyBuffers() {
+  protected void createPolyBuffers(int usage) {
     if (!polyBuffersCreated || polyBuffersContextIsOutdated()) {
       polyBuffersContext = pgl.getCurrentContext();
 
-      bufPolyVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 4, PGL.SIZEOF_FLOAT);
-      bufPolyColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufPolyNormal = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT);
-      bufPolyTexcoord = new VertexBuffer(this, PGL.ARRAY_BUFFER, 2, PGL.SIZEOF_FLOAT);
-      bufPolyAmbient = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufPolySpecular = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufPolyEmissive = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufPolyShininess = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_FLOAT);
+      bufPolyVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 4, PGL.SIZEOF_FLOAT, usage);
+      bufPolyColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufPolyNormal = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT, usage);
+      bufPolyTexcoord = new VertexBuffer(this, PGL.ARRAY_BUFFER, 2, PGL.SIZEOF_FLOAT, usage);
+      bufPolyAmbient = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufPolySpecular = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufPolyEmissive = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufPolyShininess = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_FLOAT, usage);
       pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
-      bufPolyIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, true);
+      bufPolyIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, usage, true);
       pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, 0);
 
       polyBuffersCreated = true;
@@ -1219,71 +1245,46 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
   protected void updatePolyBuffers(boolean lit, boolean tex,
                                    boolean needNormals, boolean needTexCoords) {
-    createPolyBuffers();
+    createPolyBuffers(PGL.bufferUsageImmediate);
 
-    int size = tessGeo.polyVertexCount;
-    int sizef = size * PGL.SIZEOF_FLOAT;
-    int sizei = size * PGL.SIZEOF_INT;
-
-    tessGeo.updatePolyVerticesBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyVertex.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef,
-                   tessGeo.polyVerticesBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPolyVertices(PGL.bufferUsageImmediate);
 
-    tessGeo.updatePolyColorsBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyColor.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                   tessGeo.polyColorsBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPolyColors(PGL.bufferUsageImmediate);
 
     if (lit) {
-      tessGeo.updatePolyAmbientBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyAmbient.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                     tessGeo.polyAmbientBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolyAmbient(PGL.bufferUsageImmediate);
 
-      tessGeo.updatePolySpecularBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolySpecular.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                     tessGeo.polySpecularBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolySpecular(PGL.bufferUsageImmediate);
 
-      tessGeo.updatePolyEmissiveBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyEmissive.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                     tessGeo.polyEmissiveBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolyEmissive(PGL.bufferUsageImmediate);
 
-      tessGeo.updatePolyShininessBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyShininess.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, sizef,
-                     tessGeo.polyShininessBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolyShininess(PGL.bufferUsageImmediate);
     }
 
     if (lit || needNormals) {
-      tessGeo.updatePolyNormalsBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyNormal.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, 3 * sizef,
-                     tessGeo.polyNormalsBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolyNormals(PGL.bufferUsageImmediate);
     }
 
     if (tex || needTexCoords) {
-      tessGeo.updatePolyTexCoordsBuffer();
       pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPolyTexcoord.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef,
-                     tessGeo.polyTexCoordsBuffer, PGL.STATIC_DRAW);
+      tessGeo.copyPolyTexCoords(PGL.bufferUsageImmediate);
     }
 
     for (String name: polyAttribs.keySet()) {
       VertexAttribute attrib = polyAttribs.get(name);
-      tessGeo.updateAttribBuffer(name);
       pgl.bindBuffer(PGL.ARRAY_BUFFER, attrib.buf.glId);
-      pgl.bufferData(PGL.ARRAY_BUFFER, attrib.sizeInBytes(size),
-                     tessGeo.polyAttribBuffers.get(name), PGL.STATIC_DRAW);
+      tessGeo.copyPolyAttribs(attrib, PGL.bufferUsageImmediate);
     }
 
-    tessGeo.updatePolyIndicesBuffer();
     pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, bufPolyIndex.glId);
-    pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER,
-      tessGeo.polyIndexCount * PGL.SIZEOF_INDEX, tessGeo.polyIndicesBuffer,
-      PGL.STATIC_DRAW);
+    tessGeo.copyPolyIndices(PGL.bufferUsageImmediate);
   }
 
 
@@ -1298,15 +1299,15 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   }
 
 
-  protected void createLineBuffers() {
+  protected void createLineBuffers(int usage) {
     if (!lineBuffersCreated || lineBufferContextIsOutdated()) {
       lineBuffersContext = pgl.getCurrentContext();
 
-      bufLineVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT);
-      bufLineColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufLineAttrib = new VertexBuffer(this, PGL.ARRAY_BUFFER, 4, PGL.SIZEOF_FLOAT);
+      bufLineVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT, usage);
+      bufLineColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufLineAttrib = new VertexBuffer(this, PGL.ARRAY_BUFFER, 4, PGL.SIZEOF_FLOAT, usage);
       pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
-      bufLineIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, true);
+      bufLineIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, usage, true);
       pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, 0);
 
       lineBuffersCreated = true;
@@ -1315,34 +1316,19 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
 
   protected void updateLineBuffers() {
-    createLineBuffers();
+    createLineBuffers(PGL.bufferUsageImmediate);
 
-    int size = tessGeo.lineVertexCount;
-    int sizef = size * PGL.SIZEOF_FLOAT;
-    int sizei = size * PGL.SIZEOF_INT;
-
-
-
-    tessGeo.updateLineVerticesBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufLineVertex.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, tessGeo.lineVerticesBuffer,
-                   PGL.STATIC_DRAW);
+    tessGeo.copyLineVertices(PGL.bufferUsageImmediate);
 
-    tessGeo.updateLineColorsBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufLineColor.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                   tessGeo.lineColorsBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyLineColors(PGL.bufferUsageImmediate);
 
-    tessGeo.updateLineDirectionsBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufLineAttrib.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef,
-                   tessGeo.lineDirectionsBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyLineDirections(PGL.bufferUsageImmediate);
 
-    tessGeo.updateLineIndicesBuffer();
     pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, bufLineIndex.glId);
-    pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER,
-                   tessGeo.lineIndexCount * PGL.SIZEOF_INDEX,
-                   tessGeo.lineIndicesBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyLineIndices(PGL.bufferUsageImmediate);
   }
 
 
@@ -1357,15 +1343,15 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   }
 
 
-  protected void createPointBuffers() {
+  protected void createPointBuffers(int usage) {
     if (!pointBuffersCreated || pointBuffersContextIsOutdated()) {
       pointBuffersContext = pgl.getCurrentContext();
 
-      bufPointVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT);
-      bufPointColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT);
-      bufPointAttrib = new VertexBuffer(this, PGL.ARRAY_BUFFER, 2, PGL.SIZEOF_FLOAT);
+      bufPointVertex = new VertexBuffer(this, PGL.ARRAY_BUFFER, 3, PGL.SIZEOF_FLOAT, usage);
+      bufPointColor = new VertexBuffer(this, PGL.ARRAY_BUFFER, 1, PGL.SIZEOF_INT, usage);
+      bufPointAttrib = new VertexBuffer(this, PGL.ARRAY_BUFFER, 2, PGL.SIZEOF_FLOAT, usage);
       pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
-      bufPointIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, true);
+      bufPointIndex = new VertexBuffer(this, PGL.ELEMENT_ARRAY_BUFFER, 1, PGL.SIZEOF_INDEX, usage, true);
       pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, 0);
 
       pointBuffersCreated = true;
@@ -1374,32 +1360,19 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
 
   protected void updatePointBuffers() {
-    createPointBuffers();
+    createPointBuffers(PGL.bufferUsageImmediate);
 
-    int size = tessGeo.pointVertexCount;
-    int sizef = size * PGL.SIZEOF_FLOAT;
-    int sizei = size * PGL.SIZEOF_INT;
-
-    tessGeo.updatePointVerticesBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPointVertex.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef,
-                   tessGeo.pointVerticesBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPointVertices(PGL.bufferUsageImmediate);
 
-    tessGeo.updatePointColorsBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPointColor.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, sizei,
-                   tessGeo.pointColorsBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPointColors(PGL.bufferUsageImmediate);
 
-    tessGeo.updatePointOffsetsBuffer();
     pgl.bindBuffer(PGL.ARRAY_BUFFER, bufPointAttrib.glId);
-    pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef,
-                   tessGeo.pointOffsetsBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPointOffsets(PGL.bufferUsageImmediate);
 
-    tessGeo.updatePointIndicesBuffer();
     pgl.bindBuffer(PGL.ELEMENT_ARRAY_BUFFER, bufPointIndex.glId);
-    pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER,
-      tessGeo.pointIndexCount * PGL.SIZEOF_INDEX,
-      tessGeo.pointIndicesBuffer, PGL.STATIC_DRAW);
+    tessGeo.copyPointIndices(PGL.bufferUsageImmediate);
   }
 
 
@@ -1455,12 +1428,13 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     setViewport();
+    checkSettings();
     if (primaryGraphics) {
       beginOnscreenDraw();
     } else {
       beginOffscreenDraw();
     }
-    checkSettings();
+
 
     drawing = true;
 
@@ -1565,7 +1539,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       // neither GL_MULTISAMPLE nor GL_POLYGON_SMOOTH are part of GLES2 or GLES3
     } else if (smooth < 1) {
       pgl.disable(PGL.MULTISAMPLE);
-    } else if (1 <= smooth) {
+    } else {
       pgl.enable(PGL.MULTISAMPLE);
     }
     if (!pgl.isES()) {
@@ -1586,16 +1560,14 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     pgl.activeTexture(PGL.TEXTURE0);
 
-    if (hints[DISABLE_DEPTH_MASK]) {
-      pgl.depthMask(false);
-    } else {
-      pgl.depthMask(true);
-    }
+    pgl.depthMask(!hints[DISABLE_DEPTH_MASK]);
 
     FrameBuffer fb = getCurrentFB();
     if (fb != null) {
       fb.bind();
-      if (drawBufferSupported) pgl.drawBuffer(fb.getDefaultDrawBuffer());
+      if (drawBufferSupported) {
+        pgl.drawBuffer(fb.getDefaultDrawBuffer());
+      }
     }
   }
 
@@ -2107,7 +2079,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
     VertexAttribute attrib = polyAttribs.get(name);
     if (attrib == null) {
-      attrib = new VertexAttribute(this, name, kind, type, size);
+      attrib = new VertexAttribute(this, name, kind, type, size, PGL.bufferUsageImmediate);
       polyAttribs.put(name, attrib);
       inGeo.initAttrib(attrib);
       tessGeo.initAttrib(attrib);
@@ -2335,7 +2307,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       }
 
       if (hasPolys && isDepthSortingEnabled) {
-        // We flush after lines so they are visible
+        // Flush after lines so that they are visible
         // under transparent polygons
         flushSortedPolys();
         if (raw != null) {
@@ -2365,8 +2337,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
   protected void flushPolys() {
     boolean customShader = polyShader != null;
-    boolean needNormals = customShader ? polyShader.accessNormals() : false;
-    boolean needTexCoords = customShader ? polyShader.accessTexCoords() : false;
+    boolean needNormals = customShader && polyShader.accessNormals();
+    boolean needTexCoords = customShader && polyShader.accessTexCoords();
 
     updatePolyBuffers(lights, texCache.hasTextures, needNormals, needTexCoords);
 
@@ -2438,8 +2410,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
   protected void flushSortedPolys() {
     boolean customShader = polyShader != null;
-    boolean needNormals = customShader ? polyShader.accessNormals() : false;
-    boolean needTexCoords = customShader ? polyShader.accessTexCoords() : false;
+    boolean needNormals = customShader && polyShader.accessNormals();
+    boolean needTexCoords = customShader && polyShader.accessTexCoords();
 
     sorter.sort(tessGeo);
 
@@ -2781,12 +2753,11 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       int voffset = cache.vertexOffset[n];
 
       for (int ln = ioffset / 6; ln < (ioffset + icount) / 6; ln++) {
-        // Each line segment is defined by six indices since its
-        // formed by two triangles. We only need the first and last
-        // vertices.
+        // Each line segment is defined by six indices since it is
+        // formed by two triangles. Only need the first and last verts.
         // This bunch of vertices could also be the bevel triangles,
         // with we detect this situation by looking at the line weight.
-        int i0 = voffset + indices[6 * ln + 0];
+        int i0 = voffset + indices[6 * ln];
         int i1 = voffset + indices[6 * ln + 5];
         float sw0 = 2 * attribs[4 * i0 + 3];
         float sw1 = 2 * attribs[4 * i1 + 3];
@@ -2886,7 +2857,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
         float weight;
         int perim;
         if (0 < size) { // round point
-          weight = +size / 0.5f;
+          weight = size / 0.5f;
           perim = PApplet.min(MAX_POINT_ACCURACY, PApplet.max(MIN_POINT_ACCURACY,
                               (int) (TWO_PI * weight / POINT_ACCURACY_FACTOR))) + 1;
         } else {        // Square point
@@ -3485,7 +3456,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
 
   @Override
-  protected float textWidthImpl(char buffer[], int start, int stop) {
+  protected float textWidthImpl(char[] buffer, int start, int stop) {
     if (textFont == null) defaultFontOrDeath("textWidth");
     Object font = textFont.getNative();
     float twidth = 0;
@@ -3510,7 +3481,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
    * Implementation of actual drawing for a line of text.
    */
   @Override
-  protected void textLineImpl(char buffer[], int start, int stop,
+  protected void textLineImpl(char[] buffer, int start, int stop,
                               float x, float y) {
 
     if (textMode == SHAPE && textFont.getNative() == null) {
@@ -3654,7 +3625,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     PGL.FontOutline outline = pgl.createFontOutline(ch, textFont.getNative());
 
     // six element array received from the Java2D path iterator
-    float textPoints[] = new float[6];
+    float[] textPoints = new float[6];
     float lastX = 0;
     float lastY = 0;
 
@@ -3924,7 +3895,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
 
   static protected void invScale(PMatrix2D matrix, float x, float y) {
-    matrix.preApply(1/x, 0, 0, 1/y, 0, 0);
+    matrix.preApply(1/x, 0, 0, 0, 1/y, 0);
   }
 
 
@@ -4504,8 +4475,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     // Flushing geometry with a different perspective configuration.
     flush();
 
-    float x = +2.0f / w;
-    float y = +2.0f / h;
+    float x =  2.0f / w;
+    float y =  2.0f / h;
     float z = -2.0f / d;
 
     float tx = -(right + left) / w;
@@ -4663,8 +4634,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     if (nonZero(ow)) {
       ox /= ow;
     }
-    float sx = width * (1 + ox) / 2.0f;
-    return sx;
+    return width * (1 + ox) / 2.0f;
   }
 
 
@@ -4719,8 +4689,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     if (nonZero(ow)) {
       oz /= ow;
     }
-    float sz = (oz + 1) / 2.0f;
-    return sz;
+    return (oz + 1) / 2.0f;
   }
 
 
@@ -5441,6 +5410,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       PGL.getIntArray(pixelBuffer, pixels);
       PGL.nativeToJavaARGB(pixels, pixelWidth, pixelHeight);
     } catch (ArrayIndexOutOfBoundsException e) {
+      // ignored
     }
   }
 
@@ -5470,6 +5440,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       }
       PGL.javaToNativeARGB(nativePixels, w, h);
     } catch (ArrayIndexOutOfBoundsException e) {
+      // ignored
     }
     PGL.putIntArray(nativePixelBuffer, nativePixels);
     // Copying pixel buffer to screen texture...
@@ -5568,10 +5539,13 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   // SAVE
 
 
+  // need to call save() to ensure 1) path is correct and 2) pixels are loaded
+  /*
   @Override
   public boolean save(String filename) {
     return saveImpl(filename);
   }
+  */
 
 
   @Override
@@ -5849,8 +5823,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   // LOAD/UPDATE TEXTURE
 
 
-  // Loads the current contents of the renderer's drawing surface into the
-  // its texture.
+  // Load the current contents of the drawing surface into a texture.
   public void loadTexture() {
     boolean needEndDraw = false;
     if (!drawing) {
@@ -5884,6 +5857,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
           pgl.readPixelsImpl(0, 0, pixelWidth, pixelHeight, PGL.RGBA, PGL.UNSIGNED_BYTE,
                              nativePixelBuffer);
         } catch (IndexOutOfBoundsException e) {
+          // ignored
         }
         endPixelsOp();
 
@@ -6187,25 +6161,25 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int scrX0, scrX1;
     int scrY0, scrY1;
     if (invX) {
-      scrX0 = dx + dw;
-      scrX1 = dx;
+      scrX0 = (dx + dw) / src.pixelDensity;
+      scrX1 = dx / src.pixelDensity;
     } else {
-      scrX0 = dx;
-      scrX1 = dx + dw;
+      scrX0 = dx / src.pixelDensity;
+      scrX1 = (dx + dw) / src.pixelDensity;
     }
 
     int texX0 = sx;
     int texX1 = sx + sw;
     int texY0, texY1;
     if (invY) {
-      scrY0 = height - (dy + dh);
-      scrY1 = height - dy;
+      scrY0 = height - (dy + dh) / src.pixelDensity;
+      scrY1 = height - dy / src.pixelDensity;
       texY0 = tex.height - (sy + sh);
       texY1 = tex.height - sy;
     } else {
       // Because drawTexture uses bottom-to-top orientation of Y axis.
-      scrY0 = height - dy;
-      scrY1 = height - (dy + dh);
+      scrY0 = height - dy / src.pixelDensity;
+      scrY1 = height - (dy + dh) / src.pixelDensity;
       texY0 = sy;
       texY1 = sy + sh;
     }
@@ -6214,7 +6188,6 @@ public abstract class PGraphicsOpenGL extends PGraphics {
                     0, 0, width, height,
                     texX0, texY0, texX1, texY1,
                     scrX0, scrY0, scrX1, scrY1);
-
 
     if (needEndDraw) {
       endDraw();
@@ -6497,20 +6470,12 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     if (!tex.colorBuffer() &&
         (tex.usingMipmaps == hints[DISABLE_TEXTURE_MIPMAPS] ||
          tex.currentSampling() != textureSampling)) {
-      if (hints[DISABLE_TEXTURE_MIPMAPS]) {
-        tex.usingMipmaps(false, textureSampling);
-      } else {
-        tex.usingMipmaps(true, textureSampling);
-      }
+      tex.usingMipmaps(!hints[DISABLE_TEXTURE_MIPMAPS], textureSampling);
     }
 
     if ((tex.usingRepeat && textureWrap == CLAMP) ||
         (!tex.usingRepeat && textureWrap == REPEAT)) {
-      if (textureWrap == CLAMP) {
-        tex.usingRepeat(false);
-      } else {
-        tex.usingRepeat(true);
-      }
+      tex.usingRepeat(textureWrap != CLAMP);
     }
   }
 
@@ -6804,7 +6769,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       // neither GL_MULTISAMPLE nor GL_POLYGON_SMOOTH are part of GLES2 or GLES3
     } else if (smooth < 1) {
       pgl.disable(PGL.MULTISAMPLE);
-    } else if (1 <= smooth) {
+    } else {
       pgl.enable(PGL.MULTISAMPLE);
     }
     if (!pgl.isES()) {
@@ -6820,7 +6785,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
         background(backgroundColor);
       } else {
         // offscreen surfaces are transparent by default.
-        background(0x00 << 24 | (backgroundColor & 0xFFFFFF));
+        background(backgroundColor & 0xFFFFFF);
 
         // Recreate offscreen FBOs
         restartPGL();
@@ -7208,6 +7173,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int elementSize;
     VertexBuffer buf;
     int glLoc;
+    int glUsage;
 
     float[] fvalues;
     int[] ivalues;
@@ -7219,7 +7185,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     int lastModified;
     boolean active;
 
-    VertexAttribute(PGraphicsOpenGL pg, String name, int kind, int type, int size) {
+    VertexAttribute(PGraphicsOpenGL pg, String name, int kind, int type, int size, int usage) {
       this.pg = pg;
       this.name = name;
       this.kind = kind;
@@ -7245,6 +7211,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
       buf = null;
       glLoc = -1;
+      glUsage = usage;
 
       modified = false;
       firstModified = PConstants.MAX_INT;
@@ -7295,7 +7262,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     void createBuffer(PGL pgl) {
-      buf = new VertexBuffer(pg, PGL.ARRAY_BUFFER, size, elementSize, false);
+      buf = new VertexBuffer(pg, PGL.ARRAY_BUFFER, size, elementSize, glUsage, false);
     }
 
     void deleteBuffer(PGL pgl) {
@@ -7377,8 +7344,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
 
   static protected TessGeometry newTessGeometry(PGraphicsOpenGL pg,
-                                                AttributeMap attr, int mode) {
-    return new TessGeometry(pg, attr, mode);
+                                                AttributeMap attr, int mode, boolean stream) {
+    return new TessGeometry(pg, attr, mode, stream);
   }
 
 
@@ -7870,8 +7837,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
           int col = iarray[aidx];
           vector[vidx++] = (col >> 24) & 0xFF;
           vector[vidx++] = (col >> 16) & 0xFF;
-          vector[vidx++] = (col >>  8) & 0xFF;
-          vector[vidx++] = (col >>  0) & 0xFF;
+          vector[vidx++] = (col >> 8) & 0xFF;
+          vector[vidx++] = col & 0xFF;
         } else {
           if (attrib.isFloat()) {
             float[] farray = fattribs.get(name);
@@ -7899,61 +7866,61 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     // Expand arrays
 
     void expandVertices(int n) {
-      float temp[] = new float[3 * n];
+      float[] temp = new float[3 * n];
       PApplet.arrayCopy(vertices, 0, temp, 0, 3 * vertexCount);
       vertices = temp;
     }
 
     void expandColors(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(colors, 0, temp, 0, vertexCount);
       colors = temp;
     }
 
     void expandNormals(int n) {
-      float temp[] = new float[3 * n];
+      float[] temp = new float[3 * n];
       PApplet.arrayCopy(normals, 0, temp, 0, 3 * vertexCount);
       normals = temp;
     }
 
     void expandTexCoords(int n) {
-      float temp[] = new float[2 * n];
+      float[] temp = new float[2 * n];
       PApplet.arrayCopy(texcoords, 0, temp, 0, 2 * vertexCount);
       texcoords = temp;
     }
 
     void expandStrokeColors(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(strokeColors, 0, temp, 0, vertexCount);
       strokeColors = temp;
     }
 
     void expandStrokeWeights(int n) {
-      float temp[] = new float[n];
+      float[] temp = new float[n];
       PApplet.arrayCopy(strokeWeights, 0, temp, 0, vertexCount);
       strokeWeights = temp;
     }
 
     void expandAmbient(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(ambient, 0, temp, 0, vertexCount);
       ambient = temp;
     }
 
     void expandSpecular(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(specular, 0, temp, 0, vertexCount);
       specular = temp;
     }
 
     void expandEmissive(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(emissive, 0, temp, 0, vertexCount);
       emissive = temp;
     }
 
     void expandShininess(int n) {
-      float temp[] = new float[n];
+      float[] temp = new float[n];
       PApplet.arrayCopy(shininess, 0, temp, 0, vertexCount);
       shininess = temp;
     }
@@ -7973,33 +7940,33 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     void expandFloatAttrib(VertexAttribute attrib, int n) {
       float[] values = fattribs.get(attrib.name);
-      float temp[] = new float[attrib.size * n];
+      float[] temp = new float[attrib.size * n];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       fattribs.put(attrib.name, temp);
     }
 
     void expandIntAttrib(VertexAttribute attrib, int n) {
       int[] values = iattribs.get(attrib.name);
-      int temp[] = new int[attrib.size * n];
+      int[] temp = new int[attrib.size * n];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       iattribs.put(attrib.name, temp);
     }
 
     void expandBoolAttrib(VertexAttribute attrib, int n) {
       byte[] values = battribs.get(attrib.name);
-      byte temp[] = new byte[attrib.size * n];
+      byte[] temp = new byte[attrib.size * n];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       battribs.put(attrib.name, temp);
     }
 
     void expandCodes(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(codes, 0, temp, 0, codeCount);
       codes = temp;
     }
 
     void expandEdges(int n) {
-      int temp[][] = new int[n][3];
+      int[][] temp = new int[n][3];
       PApplet.arrayCopy(edges, 0, temp, 0, edgeCount);
       edges = temp;
     }
@@ -8033,73 +8000,73 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     void trimVertices() {
-      float temp[] = new float[3 * vertexCount];
+      float[] temp = new float[3 * vertexCount];
       PApplet.arrayCopy(vertices, 0, temp, 0, 3 * vertexCount);
       vertices = temp;
     }
 
     void trimColors() {
-      int temp[] = new int[vertexCount];
+      int[] temp = new int[vertexCount];
       PApplet.arrayCopy(colors, 0, temp, 0, vertexCount);
       colors = temp;
     }
 
     void trimNormals() {
-      float temp[] = new float[3 * vertexCount];
+      float[] temp = new float[3 * vertexCount];
       PApplet.arrayCopy(normals, 0, temp, 0, 3 * vertexCount);
       normals = temp;
     }
 
     void trimTexCoords() {
-      float temp[] = new float[2 * vertexCount];
+      float[] temp = new float[2 * vertexCount];
       PApplet.arrayCopy(texcoords, 0, temp, 0, 2 * vertexCount);
       texcoords = temp;
     }
 
     void trimStrokeColors() {
-      int temp[] = new int[vertexCount];
+      int[] temp = new int[vertexCount];
       PApplet.arrayCopy(strokeColors, 0, temp, 0, vertexCount);
       strokeColors = temp;
     }
 
     void trimStrokeWeights() {
-      float temp[] = new float[vertexCount];
+      float[] temp = new float[vertexCount];
       PApplet.arrayCopy(strokeWeights, 0, temp, 0, vertexCount);
       strokeWeights = temp;
     }
 
     void trimAmbient() {
-      int temp[] = new int[vertexCount];
+      int[] temp = new int[vertexCount];
       PApplet.arrayCopy(ambient, 0, temp, 0, vertexCount);
       ambient = temp;
     }
 
     void trimSpecular() {
-      int temp[] = new int[vertexCount];
+      int[] temp = new int[vertexCount];
       PApplet.arrayCopy(specular, 0, temp, 0, vertexCount);
       specular = temp;
     }
 
     void trimEmissive() {
-      int temp[] = new int[vertexCount];
+      int[] temp = new int[vertexCount];
       PApplet.arrayCopy(emissive, 0, temp, 0, vertexCount);
       emissive = temp;
     }
 
     void trimShininess() {
-      float temp[] = new float[vertexCount];
+      float[] temp = new float[vertexCount];
       PApplet.arrayCopy(shininess, 0, temp, 0, vertexCount);
       shininess = temp;
     }
 
     void trimCodes() {
-      int temp[] = new int[codeCount];
+      int[] temp = new int[codeCount];
       PApplet.arrayCopy(codes, 0, temp, 0, codeCount);
       codes = temp;
     }
 
     void trimEdges() {
-      int temp[][] = new int[edgeCount][3];
+      int[][] temp = new int[edgeCount][3];
       PApplet.arrayCopy(edges, 0, temp, 0, edgeCount);
       edges = temp;
     }
@@ -8119,21 +8086,21 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     void trimFloatAttrib(VertexAttribute attrib) {
       float[] values = fattribs.get(attrib.name);
-      float temp[] = new float[attrib.size * vertexCount];
+      float[] temp = new float[attrib.size * vertexCount];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       fattribs.put(attrib.name, temp);
     }
 
     void trimIntAttrib(VertexAttribute attrib) {
       int[] values = iattribs.get(attrib.name);
-      int temp[] = new int[attrib.size * vertexCount];
+      int[] temp = new int[attrib.size * vertexCount];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       iattribs.put(attrib.name, temp);
     }
 
     void trimBoolAttrib(VertexAttribute attrib) {
       byte[] values = battribs.get(attrib.name);
-      byte temp[] = new byte[attrib.size * vertexCount];
+      byte[] temp = new byte[attrib.size * vertexCount];
       PApplet.arrayCopy(values, 0, temp, 0, attrib.size * vertexCount);
       battribs.put(attrib.name, temp);
     }
@@ -9118,6 +9085,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
   // Holds tessellated data for polygon, line and point geometry.
   static protected class TessGeometry {
     int renderMode;
+    boolean bufObjStreaming;
     PGraphicsOpenGL pg;
     AttributeMap polyAttribs;
 
@@ -9197,10 +9165,11 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     HashMap<String, int[]> ipolyAttribs = new HashMap<>();
     HashMap<String, byte[]> bpolyAttribs = new HashMap<>();
 
-    TessGeometry(PGraphicsOpenGL pg, AttributeMap attr, int mode) {
+    TessGeometry(PGraphicsOpenGL pg, AttributeMap attr, int mode, boolean stream) {
       this.pg = pg;
       this.polyAttribs = attr;
       renderMode = mode;
+      bufObjStreaming = stream;
       allocate();
     }
 
@@ -9229,25 +9198,28 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       pointOffsets = new float[2 * PGL.DEFAULT_TESS_VERTICES];
       pointIndices = new short[PGL.DEFAULT_TESS_VERTICES];
 
-      polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
-      polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
-      polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
-      polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
-      polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
-      polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
-      polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
-      polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
-      polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
+      if (!bufObjStreaming) {
+        polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
 
-      lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
-      lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
-      lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
-      lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
+        polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
+        polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
+        polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
+        polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
+        polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
+        polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
+        polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
+        polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
 
-      pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
-      pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
-      pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
-      pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
+        lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
+        lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
+        lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
+        lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
+
+        pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
+        pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
+        pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
+        pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
+      }
 
       clear();
     }
@@ -9256,15 +9228,27 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       if (attrib.type == PGL.FLOAT && !fpolyAttribs.containsKey(attrib.name)) {
         float[] temp = new float[attrib.tessSize * PGL.DEFAULT_TESS_VERTICES];
         fpolyAttribs.put(attrib.name, temp);
-        polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
+        if (!bufObjStreaming) {
+          polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
+        } else {
+          polyAttribBuffers.put(attrib.name, null);
+        }
       } else if (attrib.type == PGL.INT && !ipolyAttribs.containsKey(attrib.name)) {
         int[] temp = new int[attrib.tessSize * PGL.DEFAULT_TESS_VERTICES];
         ipolyAttribs.put(attrib.name, temp);
-        polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
+        if (!bufObjStreaming) {
+          polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
+        } else {
+          polyAttribBuffers.put(attrib.name, null);
+        }
       } else if (attrib.type == PGL.BOOL && !bpolyAttribs.containsKey(attrib.name)) {
         byte[] temp = new byte[attrib.tessSize * PGL.DEFAULT_TESS_VERTICES];
         bpolyAttribs.put(attrib.name, temp);
-        polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
+        if (!bufObjStreaming) {
+          polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
+        } else {
+          polyAttribBuffers.put(attrib.name, null);
+        }
       }
     }
 
@@ -9499,6 +9483,952 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       return last - first + 1;
     }
 
+
+    // -----------------------------------------------------------------
+    //
+    // Buffer mapping methods
+
+    protected void mapPolyVerticesBuffer() {
+      polyVerticesBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPolyVerticesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = polyVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPolyVerticesBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, null, usage);
+          mapPolyVerticesBuffer();
+          updatePolyVerticesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, polyVerticesBuffer, usage);
+      }
+    }
+
+    protected void finalPolyVerticesBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyVerticesBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyVertices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * polyVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPolyVerticesBuffer();
+        updatePolyVerticesBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyVerticesBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * polyVertexCount * PGL.SIZEOF_FLOAT, polyVerticesBuffer, usage);
+      }
+    }
+
+    protected void copyPolyVertices(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyVerticesBuffer();
+        updatePolyVerticesBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyVerticesBuffer(offset, size);
+        polyVerticesBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 4 * offset * PGL.SIZEOF_FLOAT, 4 * size * PGL.SIZEOF_FLOAT, polyVerticesBuffer);
+        polyVerticesBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyColorsBuffer() {
+      polyColorsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initPolyColorsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          polyColorsBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          polyColorsBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+          updatePolyColorsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, polyColorsBuffer, usage);
+      }
+    }
+
+    protected void finalPolyColorsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyColorsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyColors(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapPolyColorsBuffer();
+        updatePolyColorsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyColorsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, polyColorsBuffer, usage);
+      }
+    }
+
+    protected void copyPolyColors(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyColorsBuffer();
+        updatePolyColorsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyColorsBuffer(offset, size);
+        polyColorsBuffer.position(offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, polyColorsBuffer);
+        polyColorsBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyNormalsBuffer() {
+      polyNormalsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPolyNormalsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = polyVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPolyNormalsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 3 * sizef, null, usage);
+          mapPolyNormalsBuffer();
+          updatePolyNormalsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 3 * sizef, polyNormalsBuffer, usage);
+      }
+    }
+
+    protected void finalPolyNormalsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyNormalsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyNormals(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 3 * polyVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPolyNormalsBuffer();
+        updatePolyNormalsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyNormalsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 3 * polyVertexCount * PGL.SIZEOF_FLOAT, polyNormalsBuffer, usage);
+      }
+    }
+
+    protected void copyPolyNormals(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyNormalsBuffer();
+        updatePolyNormalsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyNormalsBuffer(offset, size);
+        polyNormalsBuffer.position(3 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 3 * offset * PGL.SIZEOF_FLOAT, 3 * size * PGL.SIZEOF_FLOAT, polyNormalsBuffer);
+        polyNormalsBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyTexCoordsBuffer() {
+      polyTexCoordsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPolyTexCoordsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = polyVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPolyTexCoordsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef, null, usage);
+          mapPolyTexCoordsBuffer();
+          updatePolyTexCoordsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef, polyTexCoordsBuffer, usage);
+      }
+    }
+
+    protected void finalPolyTexCoordsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyTexCoordsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyTexCoords(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * polyVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPolyTexCoordsBuffer();
+        updatePolyTexCoordsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyTexCoordsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * polyVertexCount * PGL.SIZEOF_FLOAT, polyTexCoordsBuffer, usage);
+      }
+    }
+
+    protected void copyPolyTexCoords(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyTexCoordsBuffer();
+        updatePolyTexCoordsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyTexCoordsBuffer(offset, size);
+        polyTexCoordsBuffer.position(2 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 2 * offset * PGL.SIZEOF_FLOAT, 2 * size * PGL.SIZEOF_FLOAT, polyTexCoordsBuffer);
+        polyTexCoordsBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyAmbientBuffer() {
+      polyAmbientBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initPolyAmbientBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          polyAmbientBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          polyAmbientBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+          updatePolyAmbientBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, polyAmbientBuffer, usage);
+      }
+    }
+
+    protected void finalPolyAmbientBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyAmbientBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyAmbient(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapPolyAmbientBuffer();
+        updatePolyAmbientBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyAmbientBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, polyAmbientBuffer, usage);
+      }
+    }
+
+    protected void copyPolyAmbient(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyAmbientBuffer();
+        updatePolyAmbientBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyAmbientBuffer(offset, size);
+        polyAmbientBuffer.position(offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, polyAmbientBuffer);
+        polyAmbientBuffer.rewind();
+      }
+    }
+
+    protected void mapPolySpecularBuffer() {
+      polySpecularBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initPolySpecularBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          polySpecularBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          polySpecularBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+          updatePolySpecularBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, polySpecularBuffer, usage);
+      }
+    }
+
+    protected void finalPolySpecularBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolySpecularBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolySpecular(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapPolySpecularBuffer();
+        updatePolySpecularBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolySpecularBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, polySpecularBuffer, usage);
+      }
+    }
+
+    protected void copyPolySpecular(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolySpecularBuffer();
+        updatePolySpecularBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolySpecularBuffer(offset, size);
+        polySpecularBuffer.position(offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, polySpecularBuffer);
+        polySpecularBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyEmissiveBuffer() {
+      polyEmissiveBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initPolyEmissiveBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          polyEmissiveBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          polyEmissiveBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+          updatePolyEmissiveBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, polyEmissiveBuffer, usage);
+      }
+    }
+
+    protected void finalPolyEmissiveBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyEmissiveBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyEmissive(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapPolyEmissiveBuffer();
+        updatePolyEmissiveBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyEmissiveBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_INT, polyEmissiveBuffer, usage);
+      }
+    }
+
+    protected void copyPolyEmissive(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyEmissiveBuffer();
+        updatePolyEmissiveBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyEmissiveBuffer(offset, size);
+        polyEmissiveBuffer.position(offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, polyEmissiveBuffer);
+        polyEmissiveBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyShininessBuffer() {
+      polyShininessBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPolyShininessBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          polyShininessBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          polyShininessBuffer = pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+          updatePolyShininessBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, polyShininessBuffer, usage);
+      }
+    }
+
+    protected void finalPolyShininessBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePolyShininessBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyShininess(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPolyShininessBuffer();
+        updatePolyShininessBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyShininessBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, polyVertexCount * PGL.SIZEOF_FLOAT, polyShininessBuffer, usage);
+      }
+    }
+
+    protected void copyPolyShininess(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyShininessBuffer();
+        updatePolyShininessBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePolyShininessBuffer(offset, size);
+        polyShininessBuffer.position(offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_FLOAT, size * PGL.SIZEOF_FLOAT, polyShininessBuffer);
+        polyShininessBuffer.rewind();
+      }
+    }
+
+    protected void mapPolyAttribBuffer(VertexAttribute attrib) {
+      if (attrib.type == PGL.FLOAT) {
+        polyAttribBuffers.put(attrib.name, pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer());
+      } else if (attrib.type == PGL.INT) {
+        polyAttribBuffers.put(attrib.name, pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer());
+      } else if (attrib.type == PGL.BOOL) {
+        polyAttribBuffers.put(attrib.name, pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess));
+      }
+    }
+
+    protected void initPolyAttribsBuffer(VertexAttribute attrib, boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int size = attrib.sizeInBytes(polyVertexCount);
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPolyAttribBuffer(attrib);
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, size, null, usage);
+          mapPolyAttribBuffer(attrib);
+          updateAttribBuffer(attrib.name);
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, size, polyAttribBuffers.get(attrib.name), usage);
+      }
+    }
+
+    protected void finalPolyAttribsBuffer(VertexAttribute attrib, int first, int last) {
+      if (0 <= first && first <= last) updateAttribBuffer(attrib.name, first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPolyAttribs(VertexAttribute attrib, int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, attrib.sizeInBytes(polyVertexCount), null, usage);
+        mapPolyAttribBuffer(attrib);
+        updateAttribBuffer(attrib.name);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateAttribBuffer(attrib.name);
+        Buffer buf = polyAttribBuffers.get(attrib.name);
+        pgl.bufferData(PGL.ARRAY_BUFFER, attrib.sizeInBytes(polyVertexCount), buf, usage);
+      }
+    }
+
+    protected void copyPolyAttribs(VertexAttribute attrib, int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPolyAttribBuffer(attrib);
+        updateAttribBuffer(attrib.name, offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateAttribBuffer(attrib.name, offset, size);
+        Buffer buf = polyAttribBuffers.get(attrib.name);
+        buf.position(attrib.size * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, attrib.sizeInBytes(offset), attrib.sizeInBytes(size), buf);
+        buf.rewind();
+      }
+    }
+
+    protected void mapPolyIndicesBuffer() {
+      polyIndicesBuffer = pg.pgl.mapBuffer(PGL.ELEMENT_ARRAY_BUFFER, PGL.bufferMapAccess).asShortBuffer();
+    }
+
+    protected void initPolyIndicesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = polyIndexCount * PGL.SIZEOF_INDEX;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPolyIndicesBuffer();
+        } else {
+          pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, null, usage);
+          mapPolyIndicesBuffer();
+          updatePolyIndicesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, polyIndicesBuffer, usage);
+      }
+    }
+
+    protected void copyPolyIndices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, polyIndexCount * PGL.SIZEOF_INDEX, null, usage);
+        mapPolyIndicesBuffer();
+        updatePolyIndicesBuffer();
+        pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+      } else {
+        updatePolyIndicesBuffer();
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, polyIndexCount * PGL.SIZEOF_INDEX, polyIndicesBuffer, usage);
+      }
+    }
+
+    protected void mapLineVerticesBuffer() {
+      lineVerticesBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initLineVerticesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = lineVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapLineVerticesBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, null, usage);
+          mapLineVerticesBuffer();
+          updateLineVerticesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, lineVerticesBuffer, usage);
+      }
+    }
+
+    protected void finalLineVerticesBuffer(int first, int last) {
+      if (0 <= first && first <= last) updateLineVerticesBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyLineVertices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * lineVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapLineVerticesBuffer();
+        updateLineVerticesBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineVerticesBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * lineVertexCount * PGL.SIZEOF_FLOAT, lineVerticesBuffer, usage);
+      }
+    }
+
+    protected void copyLineVertices(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapLineVerticesBuffer();
+        updateLineVerticesBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineVerticesBuffer(offset, size);
+        lineVerticesBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 4 * offset * PGL.SIZEOF_FLOAT, 4 * size * PGL.SIZEOF_FLOAT, lineVerticesBuffer);
+        lineVerticesBuffer.rewind();
+      }
+    }
+
+    protected void mapLineColorsBuffer() {
+      lineColorsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initLineColorsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = lineVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapLineColorsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          mapLineColorsBuffer();
+          updateLineColorsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, lineColorsBuffer, usage);
+      }
+    }
+
+    protected void finalLineColorsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updateLineColorsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyLineColors(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, lineVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapLineColorsBuffer();
+        updateLineColorsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineColorsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, lineVertexCount * PGL.SIZEOF_INT, lineColorsBuffer, usage);
+      }
+    }
+
+    protected void copyLineColors(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapLineColorsBuffer();
+        updateLineColorsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineColorsBuffer(offset, size);
+        lineColorsBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, lineColorsBuffer);
+        lineColorsBuffer.rewind();
+      }
+    }
+
+    protected void mapLineDirectionsBuffer() {
+      lineDirectionsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initLineDirectionsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = lineVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapLineDirectionsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, null, usage);
+          mapLineDirectionsBuffer();
+          updateLineDirectionsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, lineDirectionsBuffer, usage);
+      }
+    }
+
+    protected void finalLineDirectionsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updateLineDirectionsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyLineDirections(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * lineVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapLineDirectionsBuffer();
+        updateLineDirectionsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineDirectionsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * lineVertexCount * PGL.SIZEOF_FLOAT, lineDirectionsBuffer, usage);
+      }
+    }
+
+    protected void copyLineDirections(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapLineDirectionsBuffer();
+        updateLineDirectionsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updateLineDirectionsBuffer(offset, size);
+        lineDirectionsBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 4 * offset * PGL.SIZEOF_FLOAT, 4 * size * PGL.SIZEOF_FLOAT, lineDirectionsBuffer);
+        lineDirectionsBuffer.rewind();
+      }
+    }
+
+    protected void mapLineIndicesBuffer() {
+      lineIndicesBuffer = pg.pgl.mapBuffer(PGL.ELEMENT_ARRAY_BUFFER, PGL.bufferMapAccess).asShortBuffer();
+    }
+
+    protected void initLineIndicesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = lineIndexCount * PGL.SIZEOF_INDEX;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapLineIndicesBuffer();
+        } else {
+          pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, null, usage);
+          mapLineIndicesBuffer();
+          updateLineIndicesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, lineIndicesBuffer, usage);
+      }
+    }
+
+    protected void copyLineIndices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, lineIndexCount * PGL.SIZEOF_INDEX, null, usage);
+        mapLineIndicesBuffer();
+        updateLineIndicesBuffer();
+        pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+      } else {
+        updateLineIndicesBuffer();
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, lineIndexCount * PGL.SIZEOF_INDEX, lineIndicesBuffer, usage);
+      }
+    }
+
+    protected void mapPointVerticesBuffer() {
+      pointVerticesBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPointVerticesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = pointVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPointVerticesBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, null, usage);
+          mapPointVerticesBuffer();
+          updatePointVerticesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * sizef, pointVerticesBuffer, usage);
+      }
+    }
+
+    protected void finalPointVerticesBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePointVerticesBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPointVertices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * pointVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPointVerticesBuffer();
+        updatePointVerticesBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointVerticesBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 4 * pointVertexCount * PGL.SIZEOF_FLOAT, pointVerticesBuffer, usage);
+      }
+    }
+
+    protected void copyPointVertices(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPointVerticesBuffer();
+        updatePointVerticesBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointVerticesBuffer(offset, size);
+        pointVerticesBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 4 * offset * PGL.SIZEOF_FLOAT, 4 * size * PGL.SIZEOF_FLOAT, pointVerticesBuffer);
+        pointVerticesBuffer.rewind();
+      }
+    }
+
+    protected void mapPointColorsBuffer() {
+      pointColorsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asIntBuffer();
+    }
+
+    protected void initPointColorsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = pointVertexCount * PGL.SIZEOF_INT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPointColorsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, sizei, null, usage);
+          mapPointColorsBuffer();
+          updatePointColorsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, sizei, pointColorsBuffer, usage);
+      }
+    }
+
+    protected void finalPointColorsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePointColorsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPointColors(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, pointVertexCount * PGL.SIZEOF_INT, null, usage);
+        mapPointColorsBuffer();
+        updatePointColorsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointColorsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, pointVertexCount * PGL.SIZEOF_INT, pointColorsBuffer, usage);
+      }
+    }
+
+    protected void copyPointColors(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPointColorsBuffer();
+        updatePointColorsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointColorsBuffer(offset, size);
+        pointColorsBuffer.position(4 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, offset * PGL.SIZEOF_INT, size * PGL.SIZEOF_INT, pointColorsBuffer);
+        pointColorsBuffer.rewind();
+      }
+    }
+
+    protected void mapPointOffsetsBuffer() {
+      pointOffsetsBuffer = pg.pgl.mapBuffer(PGL.ARRAY_BUFFER, PGL.bufferMapAccess).asFloatBuffer();
+    }
+
+    protected void initPointOffsetsBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizef = pointVertexCount * PGL.SIZEOF_FLOAT;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPointOffsetsBuffer();
+        } else {
+          pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef, null, usage);
+          mapPointOffsetsBuffer();
+          updatePointOffsetsBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * sizef, pointOffsetsBuffer, usage);
+      }
+    }
+
+    protected void finalPointOffsetsBuffer(int first, int last) {
+      if (0 <= first && first <= last) updatePointOffsetsBuffer(first, last - first + 1);
+      pg.pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+    }
+
+    protected void copyPointOffsets(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * pointVertexCount * PGL.SIZEOF_FLOAT, null, usage);
+        mapPointOffsetsBuffer();
+        updatePointOffsetsBuffer();
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointOffsetsBuffer();
+        pgl.bufferData(PGL.ARRAY_BUFFER, 2 * pointVertexCount * PGL.SIZEOF_FLOAT, pointOffsetsBuffer, usage);
+      }
+    }
+
+    protected void copyPointOffsets(int offset, int size) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        mapPointOffsetsBuffer();
+        updatePointOffsetsBuffer(offset, size);
+        pgl.unmapBuffer(PGL.ARRAY_BUFFER);
+      } else {
+        updatePointOffsetsBuffer(offset, size);
+        pointOffsetsBuffer.position(2 * offset);
+        pgl.bufferSubData(PGL.ARRAY_BUFFER, 2 * offset * PGL.SIZEOF_FLOAT, 2 * size * PGL.SIZEOF_FLOAT, pointOffsetsBuffer);
+        pointOffsetsBuffer.rewind();
+      }
+    }
+
+    protected void mapPointIndicesBuffer() {
+      pointIndicesBuffer = pg.pgl.mapBuffer(PGL.ELEMENT_ARRAY_BUFFER, PGL.bufferMapAccess).asShortBuffer();
+    }
+
+    protected void initPointIndicesBuffer(boolean onlymap, boolean unmap, int usage) {
+      PGL pgl = pg.pgl;
+      int sizei = pointIndexCount * PGL.SIZEOF_INDEX;
+      if (bufObjStreaming) {
+        if (onlymap) {
+          mapPointIndicesBuffer();
+        } else {
+          pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, null, usage);
+          mapPointIndicesBuffer();
+          updatePointIndicesBuffer();
+        }
+        if (unmap) {
+          pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+        }
+      } else {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, sizei, pointIndicesBuffer, usage);
+      }
+    }
+
+    protected void copyPointIndices(int usage) {
+      PGL pgl = pg.pgl;
+      if (bufObjStreaming) {
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, pointIndexCount * PGL.SIZEOF_INDEX, null, usage);
+        mapPointIndicesBuffer();
+        updatePointIndicesBuffer();
+        pgl.unmapBuffer(PGL.ELEMENT_ARRAY_BUFFER);
+      } else {
+        updatePointIndicesBuffer();
+        pgl.bufferData(PGL.ELEMENT_ARRAY_BUFFER, pointIndexCount * PGL.SIZEOF_INDEX, pointIndicesBuffer, usage);
+      }
+    }
+
     // -----------------------------------------------------------------
     //
     // Methods to prepare buffers for relative read/write operations
@@ -9508,8 +10438,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updatePolyVerticesBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(polyVerticesBuffer, polyVertices,
-                            4 * offset, 4 * size);
+      PGL.updateFloatBuffer(polyVerticesBuffer, polyVertices, 4 * offset, 4 * size);
     }
 
     protected void updatePolyColorsBuffer() {
@@ -9525,8 +10454,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updatePolyNormalsBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(polyNormalsBuffer, polyNormals,
-                            3 * offset, 3 * size);
+      PGL.updateFloatBuffer(polyNormalsBuffer, polyNormals, 3 * offset, 3 * size);
     }
 
     protected void updatePolyTexCoordsBuffer() {
@@ -9534,8 +10462,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updatePolyTexCoordsBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(polyTexCoordsBuffer, polyTexCoords,
-                            2 * offset, 2 * size);
+      PGL.updateFloatBuffer(polyTexCoordsBuffer, polyTexCoords, 2 * offset, 2 * size);
     }
 
     protected void updatePolyAmbientBuffer() {
@@ -9607,8 +10534,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updateLineVerticesBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(lineVerticesBuffer, lineVertices,
-                            4 * offset, 4 * size);
+      PGL.updateFloatBuffer(lineVerticesBuffer, lineVertices, 4 * offset, 4 * size);
     }
 
     protected void updateLineColorsBuffer() {
@@ -9624,8 +10550,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updateLineDirectionsBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(lineDirectionsBuffer, lineDirections,
-                            4 * offset, 4 * size);
+      PGL.updateFloatBuffer(lineDirectionsBuffer, lineDirections, 4 * offset, 4 * size);
     }
 
     protected void updateLineIndicesBuffer() {
@@ -9641,8 +10566,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updatePointVerticesBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(pointVerticesBuffer, pointVertices,
-                            4 * offset, 4 * size);
+      PGL.updateFloatBuffer(pointVerticesBuffer, pointVertices, 4 * offset, 4 * size);
     }
 
     protected void updatePointColorsBuffer() {
@@ -9658,8 +10582,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     protected void updatePointOffsetsBuffer(int offset, int size) {
-      PGL.updateFloatBuffer(pointOffsetsBuffer, pointOffsets,
-                            2 * offset, 2 * size);
+      PGL.updateFloatBuffer(pointOffsetsBuffer, pointOffsets, 2 * offset, 2 * size);
     }
 
     protected void updatePointIndicesBuffer() {
@@ -9675,59 +10598,59 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     // Expand arrays
 
     void expandPolyVertices(int n) {
-      float temp[] = new float[4 * n];
+      float[] temp = new float[4 * n];
       PApplet.arrayCopy(polyVertices, 0, temp, 0, 4 * polyVertexCount);
       polyVertices = temp;
-      polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
+      if (!bufObjStreaming) polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
     }
 
     void expandPolyColors(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(polyColors, 0, temp, 0, polyVertexCount);
       polyColors = temp;
-      polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
+      if (!bufObjStreaming) polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
     }
 
     void expandPolyNormals(int n) {
-      float temp[] = new float[3 * n];
+      float[] temp = new float[3 * n];
       PApplet.arrayCopy(polyNormals, 0, temp, 0, 3 * polyVertexCount);
       polyNormals = temp;
-      polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
+      if (!bufObjStreaming) polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
     }
 
     void expandPolyTexCoords(int n) {
-      float temp[] = new float[2 * n];
+      float[] temp = new float[2 * n];
       PApplet.arrayCopy(polyTexCoords, 0, temp, 0, 2 * polyVertexCount);
       polyTexCoords = temp;
-      polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
+      if (!bufObjStreaming) polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
     }
 
     void expandPolyAmbient(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(polyAmbient, 0, temp, 0, polyVertexCount);
       polyAmbient = temp;
-      polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
+      if (!bufObjStreaming) polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
     }
 
     void expandPolySpecular(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(polySpecular, 0, temp, 0, polyVertexCount);
       polySpecular = temp;
-      polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
+      if (!bufObjStreaming) polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
     }
 
     void expandPolyEmissive(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(polyEmissive, 0, temp, 0, polyVertexCount);
       polyEmissive = temp;
-      polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
+      if (!bufObjStreaming) polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
     }
 
     void expandPolyShininess(int n) {
-      float temp[] = new float[n];
+      float[] temp = new float[n];
       PApplet.arrayCopy(polyShininess, 0, temp, 0, polyVertexCount);
       polyShininess = temp;
-      polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
+      if (!bufObjStreaming) polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
     }
 
     void expandAttributes(int n) {
@@ -9745,89 +10668,89 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     void expandFloatAttribute(VertexAttribute attrib, int n) {
       float[] array = fpolyAttribs.get(attrib.name);
-      float temp[] = new float[attrib.tessSize * n];
+      float[] temp = new float[attrib.tessSize * n];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       fpolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
     }
 
     void expandIntAttribute(VertexAttribute attrib, int n) {
       int[] array = ipolyAttribs.get(attrib.name);
-      int temp[] = new int[attrib.tessSize * n];
+      int[] temp = new int[attrib.tessSize * n];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       ipolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
     }
 
     void expandBoolAttribute(VertexAttribute attrib, int n) {
       byte[] array = bpolyAttribs.get(attrib.name);
-      byte temp[] = new byte[attrib.tessSize * n];
+      byte[] temp = new byte[attrib.tessSize * n];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       bpolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
     }
 
     void expandPolyIndices(int n) {
-      short temp[] = new short[n];
+      short[] temp = new short[n];
       PApplet.arrayCopy(polyIndices, 0, temp, 0, polyIndexCount);
       polyIndices = temp;
-      polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
+      if (!bufObjStreaming) polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
     }
 
     void expandLineVertices(int n) {
-      float temp[] = new float[4 * n];
+      float[] temp = new float[4 * n];
       PApplet.arrayCopy(lineVertices, 0, temp, 0, 4 * lineVertexCount);
       lineVertices = temp;
-      lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
+      if (!bufObjStreaming) lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
     }
 
     void expandLineColors(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(lineColors, 0, temp, 0, lineVertexCount);
       lineColors = temp;
-      lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
+      if (!bufObjStreaming) lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
     }
 
     void expandLineDirections(int n) {
-      float temp[] = new float[4 * n];
+      float[] temp = new float[4 * n];
       PApplet.arrayCopy(lineDirections, 0, temp, 0, 4 * lineVertexCount);
       lineDirections = temp;
-      lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
+      if (!bufObjStreaming) lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
     }
 
     void expandLineIndices(int n) {
-      short temp[] = new short[n];
+      short[] temp = new short[n];
       PApplet.arrayCopy(lineIndices, 0, temp, 0, lineIndexCount);
       lineIndices = temp;
-      lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
+      if (!bufObjStreaming) lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
     }
 
     void expandPointVertices(int n) {
-      float temp[] = new float[4 * n];
+      float[] temp = new float[4 * n];
       PApplet.arrayCopy(pointVertices, 0, temp, 0, 4 * pointVertexCount);
       pointVertices = temp;
-      pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
+      if (!bufObjStreaming) pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
     }
 
     void expandPointColors(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(pointColors, 0, temp, 0, pointVertexCount);
       pointColors = temp;
-      pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
+      if (!bufObjStreaming) pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
     }
 
     void expandPointOffsets(int n) {
-      float temp[] = new float[2 * n];
+      float[] temp = new float[2 * n];
       PApplet.arrayCopy(pointOffsets, 0, temp, 0, 2 * pointVertexCount);
       pointOffsets = temp;
-      pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
+      if (!bufObjStreaming) pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
     }
 
     void expandPointIndices(int n) {
-      short temp[] = new short[n];
+      short[] temp = new short[n];
       PApplet.arrayCopy(pointIndices, 0, temp, 0, pointIndexCount);
       pointIndices = temp;
-      pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
+      if (!bufObjStreaming) pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
     }
 
     // -----------------------------------------------------------------
@@ -9873,59 +10796,59 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     void trimPolyVertices() {
-      float temp[] = new float[4 * polyVertexCount];
+      float[] temp = new float[4 * polyVertexCount];
       PApplet.arrayCopy(polyVertices, 0, temp, 0, 4 * polyVertexCount);
       polyVertices = temp;
-      polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
+      if (!bufObjStreaming) polyVerticesBuffer = PGL.allocateFloatBuffer(polyVertices);
     }
 
     void trimPolyColors() {
-      int temp[] = new int[polyVertexCount];
+      int[] temp = new int[polyVertexCount];
       PApplet.arrayCopy(polyColors, 0, temp, 0, polyVertexCount);
       polyColors = temp;
-      polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
+      if (!bufObjStreaming) polyColorsBuffer = PGL.allocateIntBuffer(polyColors);
     }
 
     void trimPolyNormals() {
-      float temp[] = new float[3 * polyVertexCount];
+      float[] temp = new float[3 * polyVertexCount];
       PApplet.arrayCopy(polyNormals, 0, temp, 0, 3 * polyVertexCount);
       polyNormals = temp;
-      polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
+      if (!bufObjStreaming) polyNormalsBuffer = PGL.allocateFloatBuffer(polyNormals);
     }
 
     void trimPolyTexCoords() {
-      float temp[] = new float[2 * polyVertexCount];
+      float[] temp = new float[2 * polyVertexCount];
       PApplet.arrayCopy(polyTexCoords, 0, temp, 0, 2 * polyVertexCount);
       polyTexCoords = temp;
-      polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
+      if (!bufObjStreaming) polyTexCoordsBuffer = PGL.allocateFloatBuffer(polyTexCoords);
     }
 
     void trimPolyAmbient() {
-      int temp[] = new int[polyVertexCount];
+      int[] temp = new int[polyVertexCount];
       PApplet.arrayCopy(polyAmbient, 0, temp, 0, polyVertexCount);
       polyAmbient = temp;
-      polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
+      if (!bufObjStreaming) polyAmbientBuffer = PGL.allocateIntBuffer(polyAmbient);
     }
 
     void trimPolySpecular() {
-      int temp[] = new int[polyVertexCount];
+      int[] temp = new int[polyVertexCount];
       PApplet.arrayCopy(polySpecular, 0, temp, 0, polyVertexCount);
       polySpecular = temp;
-      polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
+      if (!bufObjStreaming) polySpecularBuffer = PGL.allocateIntBuffer(polySpecular);
     }
 
     void trimPolyEmissive() {
-      int temp[] = new int[polyVertexCount];
+      int[] temp = new int[polyVertexCount];
       PApplet.arrayCopy(polyEmissive, 0, temp, 0, polyVertexCount);
       polyEmissive = temp;
-      polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
+      if (!bufObjStreaming) polyEmissiveBuffer = PGL.allocateIntBuffer(polyEmissive);
     }
 
     void trimPolyShininess() {
-      float temp[] = new float[polyVertexCount];
+      float[] temp = new float[polyVertexCount];
       PApplet.arrayCopy(polyShininess, 0, temp, 0, polyVertexCount);
       polyShininess = temp;
-      polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
+      if (!bufObjStreaming) polyShininessBuffer = PGL.allocateFloatBuffer(polyShininess);
     }
 
     void trimPolyAttributes() {
@@ -9943,89 +10866,89 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
     void trimFloatAttribute(VertexAttribute attrib) {
       float[] array = fpolyAttribs.get(attrib.name);
-      float temp[] = new float[attrib.tessSize * polyVertexCount];
+      float[] temp = new float[attrib.tessSize * polyVertexCount];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       fpolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateFloatBuffer(temp));
     }
 
     void trimIntAttribute(VertexAttribute attrib) {
       int[] array = ipolyAttribs.get(attrib.name);
-      int temp[] = new int[attrib.tessSize * polyVertexCount];
+      int[] temp = new int[attrib.tessSize * polyVertexCount];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       ipolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateIntBuffer(temp));
     }
 
     void trimBoolAttribute(VertexAttribute attrib) {
       byte[] array = bpolyAttribs.get(attrib.name);
-      byte temp[] = new byte[attrib.tessSize * polyVertexCount];
+      byte[] temp = new byte[attrib.tessSize * polyVertexCount];
       PApplet.arrayCopy(array, 0, temp, 0, attrib.tessSize * polyVertexCount);
       bpolyAttribs.put(attrib.name, temp);
-      polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
+      if (!bufObjStreaming) polyAttribBuffers.put(attrib.name, PGL.allocateByteBuffer(temp));
     }
 
     void trimPolyIndices() {
-      short temp[] = new short[polyIndexCount];
+      short[] temp = new short[polyIndexCount];
       PApplet.arrayCopy(polyIndices, 0, temp, 0, polyIndexCount);
       polyIndices = temp;
-      polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
+      if (!bufObjStreaming) polyIndicesBuffer = PGL.allocateShortBuffer(polyIndices);
     }
 
     void trimLineVertices() {
-      float temp[] = new float[4 * lineVertexCount];
+      float[] temp = new float[4 * lineVertexCount];
       PApplet.arrayCopy(lineVertices, 0, temp, 0, 4 * lineVertexCount);
       lineVertices = temp;
-      lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
+      if (!bufObjStreaming) lineVerticesBuffer = PGL.allocateFloatBuffer(lineVertices);
     }
 
     void trimLineColors() {
-      int temp[] = new int[lineVertexCount];
+      int[] temp = new int[lineVertexCount];
       PApplet.arrayCopy(lineColors, 0, temp, 0, lineVertexCount);
       lineColors = temp;
-      lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
+      if (!bufObjStreaming) lineColorsBuffer = PGL.allocateIntBuffer(lineColors);
     }
 
     void trimLineDirections() {
-      float temp[] = new float[4 * lineVertexCount];
+      float[] temp = new float[4 * lineVertexCount];
       PApplet.arrayCopy(lineDirections, 0, temp, 0, 4 * lineVertexCount);
       lineDirections = temp;
-      lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
+      if (!bufObjStreaming) lineDirectionsBuffer = PGL.allocateFloatBuffer(lineDirections);
     }
 
     void trimLineIndices() {
-      short temp[] = new short[lineIndexCount];
+      short[] temp = new short[lineIndexCount];
       PApplet.arrayCopy(lineIndices, 0, temp, 0, lineIndexCount);
       lineIndices = temp;
-      lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
+      if (!bufObjStreaming) lineIndicesBuffer = PGL.allocateShortBuffer(lineIndices);
     }
 
     void trimPointVertices() {
-      float temp[] = new float[4 * pointVertexCount];
+      float[] temp = new float[4 * pointVertexCount];
       PApplet.arrayCopy(pointVertices, 0, temp, 0, 4 * pointVertexCount);
       pointVertices = temp;
-      pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
+      if (!bufObjStreaming) pointVerticesBuffer = PGL.allocateFloatBuffer(pointVertices);
     }
 
     void trimPointColors() {
-      int temp[] = new int[pointVertexCount];
+      int[] temp = new int[pointVertexCount];
       PApplet.arrayCopy(pointColors, 0, temp, 0, pointVertexCount);
       pointColors = temp;
-      pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
+      if (!bufObjStreaming) pointColorsBuffer = PGL.allocateIntBuffer(pointColors);
     }
 
     void trimPointOffsets() {
-      float temp[] = new float[2 * pointVertexCount];
+      float[] temp = new float[2 * pointVertexCount];
       PApplet.arrayCopy(pointOffsets, 0, temp, 0, 2 * pointVertexCount);
       pointOffsets = temp;
-      pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
+      if (!bufObjStreaming) pointOffsetsBuffer = PGL.allocateFloatBuffer(pointOffsets);
     }
 
     void trimPointIndices() {
-      short temp[] = new short[pointIndexCount];
+      short[] temp = new short[pointIndexCount];
       PApplet.arrayCopy(pointIndices, 0, temp, 0, pointIndexCount);
       pointIndices = temp;
-      pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
+      if (!bufObjStreaming) pointIndicesBuffer = PGL.allocateShortBuffer(pointIndices);
     }
 
     // -----------------------------------------------------------------
@@ -11609,7 +12532,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
         path.moveTo(in.vertices[0], in.vertices[1], in.strokeColors[0]);
         for (int ln = 0; ln < lineCount - 1; ln++) {
           int i1 = ln + 1;
-          path.lineTo(in.vertices[3 * i1 + 0], in.vertices[3 * i1 + 1],
+          path.lineTo(in.vertices[3 * i1], in.vertices[3 * i1 + 1],
                       in.strokeColors[i1]);
         }
         path.closePath();
@@ -11727,19 +12650,19 @@ public abstract class PGraphicsOpenGL extends PGraphics {
           int i1 = edge[1];
           switch (edge[2]) {
           case EDGE_MIDDLE:
-            path.lineTo(strokeVertices[3 * i1 + 0], strokeVertices[3 * i1 + 1],
+            path.lineTo(strokeVertices[3 * i1], strokeVertices[3 * i1 + 1],
                         strokeColors[i1]);
             break;
           case EDGE_START:
-            path.moveTo(strokeVertices[3 * i0 + 0], strokeVertices[3 * i0 + 1],
+            path.moveTo(strokeVertices[3 * i0], strokeVertices[3 * i0 + 1],
                         strokeColors[i0]);
-            path.lineTo(strokeVertices[3 * i1 + 0], strokeVertices[3 * i1 + 1],
+            path.lineTo(strokeVertices[3 * i1], strokeVertices[3 * i1 + 1],
                         strokeColors[i1]);
             break;
           case EDGE_STOP:
-            path.lineTo(strokeVertices[3 * i1 + 0], strokeVertices[3 * i1 + 1],
+            path.lineTo(strokeVertices[3 * i1], strokeVertices[3 * i1 + 1],
                         strokeColors[i1]);
-            path.moveTo(strokeVertices[3 * i1 + 0], strokeVertices[3 * i1 + 1],
+            path.moveTo(strokeVertices[3 * i1], strokeVertices[3 * i1 + 1],
                         strokeColors[i1]);
             break;
           case EDGE_SINGLE:
@@ -11797,8 +12720,8 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       weight = constStroke ? strokeWeight : strokeWeights[i0];
       weight *= transformScale();
 
-      tess.setLineVertex(vidx++, strokeVertices, i0, i1, color, +weight/2);
-      tess.lineIndices[iidx++] = (short) (count + 0);
+      tess.setLineVertex(vidx++, strokeVertices, i0, i1, color, weight/2);
+      tess.lineIndices[iidx++] = (short) (count);
 
       tess.setLineVertex(vidx++, strokeVertices, i0, i1, color, -weight/2);
       tess.lineIndices[iidx++] = (short) (count + 1);
@@ -11836,7 +12759,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
               tess.lineIndices[iidx++] = (short) (count + 4);
               tess.lineIndices[iidx++] = (short) (count + 5);
-              tess.lineIndices[iidx++] = (short) (count + 0);
+              tess.lineIndices[iidx++] = (short) (count);
 
               tess.lineIndices[iidx++] = (short) (count + 4);
               tess.lineIndices[iidx++] = (short) (count + 6);
@@ -11849,7 +12772,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
 
             tess.lineIndices[iidx++] = (short) (count + 4);
             tess.lineIndices[iidx++] = lastInd[0];
-            tess.lineIndices[iidx++] = (short) (count + 0);
+            tess.lineIndices[iidx++] = (short) (count);
 
             tess.lineIndices[iidx++] = (short) (count + 4);
             tess.lineIndices[iidx++] = lastInd[1];
@@ -12046,7 +12969,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     boolean noCapsJoins() {
-      // The stroke weight is scaled so it corresponds to the current
+      // The stroke weight is scaled to correspond to the current
       // "zoom level" being applied on the geometry due to scaling:
       return tess.renderMode == IMMEDIATE &&
              transformScale() * strokeWeight < PGL.MIN_CAPS_JOINS_WEIGHT;
@@ -12058,7 +12981,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     boolean segmentIsAxisAligned(int i0, int i1) {
-      return zero(in.vertices[3 * i0 + 0] - in.vertices[3 * i1 + 0]) ||
+      return zero(in.vertices[3 * i0] - in.vertices[3 * i1]) ||
              zero(in.vertices[3 * i0 + 1] - in.vertices[3 * i1 + 1]);
     }
 
@@ -12448,7 +13371,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       if (dupIndices.length == dupCount) {
         int n = dupCount << 1;
 
-        int temp[] = new int[n];
+        int[] temp = new int[n];
         PApplet.arrayCopy(dupIndices, 0, temp, 0, dupCount);
         dupIndices = temp;
       }
@@ -12495,7 +13418,7 @@ public abstract class PGraphicsOpenGL extends PGraphics {
     }
 
     void expandRawIndices(int n) {
-      int temp[] = new int[n];
+      int[] temp = new int[n];
       PApplet.arrayCopy(rawIndices, 0, temp, 0, rawSize);
       rawIndices = temp;
     }
@@ -12940,15 +13863,15 @@ public abstract class PGraphicsOpenGL extends PGraphics {
       if (pathVertexCount == pathVertices.length / 3) {
         int newSize = pathVertexCount << 1;
 
-        float vtemp[] = new float[3 * newSize];
+        float[] vtemp = new float[3 * newSize];
         PApplet.arrayCopy(pathVertices, 0, vtemp, 0, 3 * pathVertexCount);
         pathVertices = vtemp;
 
-        int ctemp[] = new int[newSize];
+        int[] ctemp = new int[newSize];
         PApplet.arrayCopy(pathColors, 0, ctemp, 0, pathVertexCount);
         pathColors = ctemp;
 
-        float wtemp[] = new float[newSize];
+        float[] wtemp = new float[newSize];
         PApplet.arrayCopy(pathWeights, 0, wtemp, 0, pathVertexCount);
         pathWeights = wtemp;
       }
