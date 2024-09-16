@@ -65,9 +65,14 @@ import processing.awt.ShimAWT;
 
 public class PSurfaceLWJGL implements PSurface {
 
-  private static final boolean DEBUG_GLFW = 
+  private static final boolean DEBUG_GLFW =
           Boolean.getBoolean("processing.lwjgl.debug");
-  
+
+  private static final boolean ALLOW_WAYLAND =
+          Boolean.getBoolean("libp5x.allowWayland");
+  private static final int SHUTDOWN_DELAY =
+          Integer.getInteger("libp5x.shutdownDelay", 100);
+
   private static int initCount;
 
   @SuppressWarnings("FieldCanBeLocal")
@@ -221,6 +226,14 @@ public class PSurfaceLWJGL implements PSurface {
 
     if (initCount == 0) {
         glfwSetErrorCallback(new ErrorHandler());
+        if (glfwPlatformSupported(GLFW_PLATFORM_WAYLAND) &&
+            !ALLOW_WAYLAND) {
+            if (glfwPlatformSupported(GLFW_PLATFORM_X11)) {
+                glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+            } else {
+                System.out.println("X11 not available and Wayland not marked allowed");
+            }
+        }
     }
 
     if (!glfwInit()) {
@@ -1195,6 +1208,7 @@ public class PSurfaceLWJGL implements PSurface {
             }
             
             glBindVertexArray(0);
+            Thread.sleep(SHUTDOWN_DELAY);
         } catch (Throwable ex) {
             this.threadRunning = false;
             System.getLogger(PSurfaceLWJGL.class.getName()).log(System.Logger.Level.ERROR,
