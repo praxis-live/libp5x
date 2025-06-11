@@ -3,7 +3,7 @@
 /*
  * Adapted for libp5x.
  *
- * Changes copyright (c) 2024 Neil C Smith
+ * Changes copyright (c) 2025 Neil C Smith
  */
 
 /*
@@ -270,6 +270,14 @@ public class PSurfaceLWJGL implements PSurface {
     glfwSetWindowTitle(window, title);
   }
 
+  public void setUndecorated(boolean undecorated) {
+      if (!PApplet.mainThread().isMainThread()) {
+          PApplet.mainThread().runLater(() -> setUndecorated(undecorated));
+          return;
+      }
+      glfwSetWindowAttrib(window, GLFW_DECORATED, undecorated ? GLFW_FALSE : GLFW_TRUE);
+  }
+
 
   @Override
   public void setVisible(boolean visible) {
@@ -471,6 +479,8 @@ public class PSurfaceLWJGL implements PSurface {
       glfwWindowHint(GLFW_GREEN_BITS, mode.greenBits());
       glfwWindowHint(GLFW_BLUE_BITS, mode.blueBits());
       glfwWindowHint(GLFW_REFRESH_RATE, mode.refreshRate());
+      glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+
       window = glfwCreateWindow(mode.width(), mode.height(),
                                 "Sketch", monitor, NULL);
     } else {
