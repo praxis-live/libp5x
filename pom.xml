@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.praxislive.libp5x</groupId>
   <artifactId>libp5x</artifactId>
-  <version>4.430.2-SNAPSHOT</version>
+  <version>4.430.2</version>
   <packaging>pom</packaging>
     
   <name>libP5X</name>
