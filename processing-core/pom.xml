@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.praxislive.libp5x</groupId>
     <artifactId>libp5x</artifactId>
-    <version>4.430.2</version>
+    <version>4.430.3-SNAPSHOT</version>
   </parent>
   
   <artifactId>processing-core</artifactId>
