@@ -519,22 +519,8 @@ public class PSurfaceLWJGL implements PSurface {
       this.scaledSketch = new ScaledSketch(sketch, graphics, pgl, contentScale);
 
       if (!sketch.sketchFullScreen() && sketch.sketchDisplay() != PConstants.SPAN) {
-        // Window sizing behavior is currently platform dependent
-        // See https://github.com/glfw/glfw/issues/677
-        int windowWidth;
-        int windowHeight;
-        if (Platform.get() == Platform.MACOSX) {
-          // On macOS, the framebuffer is scaled automatically from the requested window
-          // size, so that scale needs to be undone to get the correct framebuffer size.
-          // This does mean that framebuffer sizes which are not multiples of the content
-          // scale are impossible to create
-          windowWidth = scaledSketch.sketchToWindowUnits(sketch.sketchWidth());
-          windowHeight = scaledSketch.sketchToWindowUnits(sketch.sketchHeight());
-        } else {
-          // On Windows and X11, the framebuffer is set to the same size as the window
-          windowWidth = sketch.sketchWidth();
-          windowHeight = sketch.sketchHeight();
-        }
+        int windowWidth = scaledSketch.sketchToWindowUnits(sketch.sketchWidth());
+        int windowHeight = scaledSketch.sketchToWindowUnits(sketch.sketchHeight());
         glfwSetWindowSize(window, windowWidth, windowHeight);
       }
 
@@ -1390,11 +1376,13 @@ public class PSurfaceLWJGL implements PSurface {
         // <version> <window system> <other info>
         // Win32 and X11 are 1:1, others not.
         String version = glfwGetVersionString();
-        String[] parts = version.split(" ", 3);
+        String[] parts = version.split(" ");
         boolean isWin32orX11 = false;
-        if (parts.length >= 2) {
-          isWin32orX11 = parts[1].equalsIgnoreCase("Win32") ||
-              parts[1].equalsIgnoreCase("X11");
+        for (String part : parts) {
+          if (part.equalsIgnoreCase("Win32") || part.equalsIgnoreCase("X11")) {
+            isWin32orX11 = true;
+            break;
+          }
         }
         hasWindowUnitsEqualToPixels = isWin32orX11;
       }
