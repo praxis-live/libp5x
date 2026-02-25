@@ -1370,22 +1370,10 @@ public class PSurfaceLWJGL implements PSurface {
       // the pixel size.
       this.isSketchDensityAware = sketch.sketchPixelDensity() > 1;
 
-      { // Check whether window coords map to pixels 1:1
-        // Parse the window system from the version string, e.g.:
-        // 3.3.0 Win32 WGL EGL VisualC DLL
-        // <version> <window system> <other info>
-        // Win32 and X11 are 1:1, others not.
-        String version = glfwGetVersionString();
-        String[] parts = version.split(" ");
-        boolean isWin32orX11 = false;
-        for (String part : parts) {
-          if (part.equalsIgnoreCase("Win32") || part.equalsIgnoreCase("X11")) {
-            isWin32orX11 = true;
-            break;
-          }
-        }
-        hasWindowUnitsEqualToPixels = isWin32orX11;
-      }
+      // Check whether window coords map to pixels 1:1
+      // Win32 and X11 are 1:1, others not.
+      int platform = glfwGetPlatform();
+      hasWindowUnitsEqualToPixels = platform == GLFW_PLATFORM_X11 || platform == GLFW_PLATFORM_WIN32;
 
       // Run these after the window system check above!
       this.windowUnitsToPixelsFactor = calculateNewWindowUnitsToPixelsFactor(contentScale);
