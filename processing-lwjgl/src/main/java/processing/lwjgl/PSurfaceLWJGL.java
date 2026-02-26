@@ -38,6 +38,7 @@ import org.lwjgl.opengl.KHRDebug;
 import org.lwjgl.system.Callback;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.system.Platform;
 import processing.core.PApplet;
 import processing.core.PConstants;
 import processing.core.PGraphics;
@@ -1369,20 +1370,10 @@ public class PSurfaceLWJGL implements PSurface {
       // the pixel size.
       this.isSketchDensityAware = sketch.sketchPixelDensity() > 1;
 
-      { // Check whether window coords map to pixels 1:1
-        // Parse the window system from the version string, e.g.:
-        // 3.3.0 Win32 WGL EGL VisualC DLL
-        // <version> <window system> <other info>
-        // Win32 and X11 are 1:1, others not.
-        String version = glfwGetVersionString();
-        String[] parts = version.split(" ", 3);
-        boolean isWin32orX11 = false;
-        if (parts.length >= 2) {
-          isWin32orX11 = parts[1].equalsIgnoreCase("Win32") ||
-              parts[1].equalsIgnoreCase("X11");
-        }
-        hasWindowUnitsEqualToPixels = isWin32orX11;
-      }
+      // Check whether window coords map to pixels 1:1
+      // Win32 and X11 are 1:1, others not.
+      int platform = glfwGetPlatform();
+      hasWindowUnitsEqualToPixels = platform == GLFW_PLATFORM_X11 || platform == GLFW_PLATFORM_WIN32;
 
       // Run these after the window system check above!
       this.windowUnitsToPixelsFactor = calculateNewWindowUnitsToPixelsFactor(contentScale);
